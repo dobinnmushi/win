@@ -6,7 +6,7 @@ GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道�
 
 ```
 bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
-lib/win/win/            本体（25 のモジュール）
+lib/win/win/            本体（27 のモジュール）
 tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・helper_test.py（拡張の D-Bus の約束の試験）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
 docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）
 extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と install.sh
@@ -25,9 +25,11 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 |  | `shortcuts` | GNOME のカスタムショートカット（dconf）の読み書き・標準の操作の一覧 |
 |  | `dbus` | Window Calls の D-Bus・窓の一覧・窓の指定（`@left`・`@slot:N` など） |
 |  | `desktop` | デスクトップ（ワークスペース）の取得・切り替え（拡張 win-helper@local の D-Bus を呼ぶ） |
+|  | `usage` | 使用の記録（コマンド名と、キー経由か手入力かだけ）と集計 |
 | 保存・配置 | `store` | commands.toml・sets.toml の読み書き・コマンド書式の検査・アプリの起動コマンド |
 |  | `pickwin` | 窓の一覧の行の表示名・小窓の位置合わせ |
 |  | `placement` | 型による配置（`win layout`） |
+|  | `undo` | 元に戻す（動かす窓の、動かす前の状態の記録と復元） |
 |  | `simple` / `textui` / `nav` | list・focus・move・size・state・close／端末の対話の部品／上下左右のフォーカス移動 |
 | 状態・セット | `sets` | セット（保存した窓の並び）・プレビューの材料・モニタの一覧 |
 |  | `prompt` | コマンド入力の小窓（`win prompt`）と補完 |
@@ -113,6 +115,38 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
   - **再ログイン後に、実機で確認した**（2026-11-21）: 拡張が読み込まれ（`gnome-extensions info` が ACTIVE）、`win desktop`（表示）・`2`・`1`・`next`・`prev`・範囲外・不正な指定が、期待どおりに動いた。
 - **List の `workspace` の癖**: 副モニタの窓（全デスクトップに出ている）は、`workspace` が「いまのデスクトップ」に追従する。`win desktop list` で、副モニタの窓は、いまいるデスクトップに数えられる。
 - 方針: 動的ワークスペースでは、末尾に空のデスクトップが 1 つあるので、`count` はそれを含む。切り替えは端で一巡しない。
+
+## 4.4 使い方の想定・頻度・ショートカット（2026-11-21）
+
+実際の使用データはまだない（履歴は試験が中心）ので、**想定（推測）**で整理した。`win stats`（4.5）で実データが貯まったら、見直す。
+
+- **想定**: 2 画面（小さい内蔵 eDP-1 と、大きい外付けの主画面 HDMI-1）。よく使うアプリは Firefox・端末（nvim と Claude Code）・Claude Desktop・Slack・Thunderbird。
+- **頻度の段階**: A（毎分〜数分）窓の切り替え・アプリへ飛ぶ・反対のモニタへ／B（数十分〜時間ごと）重なり・グループの切り替え、`here`、別のモニタへ送る、閉じる／C（1 日数回）`layout`・`set`・グループの作成／D（まれ）保存・設定・定義・デスクトップ。
+- **キーの原則**: 変換キーは右親指なので、**高頻度の操作は左手の文字キー**に置く。次/前は隣り合うキー（D=前・F=次）か Shift の組（Shift+T・Shift+G）で対にする。小窓が開く操作は覚えやすい文字、破壊的な操作は押し間違いに注意。筋肉に入っているキー（J・K・O・P・M・S・`;` など）は動かさず、空きキーに足した。
+- **標準の割り当て**（変換＋キー＝`Super+Alt+キー`。スロット 1〜9 は `win focus @slot:N`）:
+
+| キー | 操作 | 段階 |
+|---|---|---|
+| D / F | `nav prev` / `nav next`（J・K も同じ） | A |
+| E | `focus @prev`（直前の窓と交互） | A |
+| Q | `focus @monitor:other`（反対のモニタの窓へ） | A |
+| W / R / A | アプリへ飛ぶ: Firefox・端末・Claude Desktop（`focus 'クラス?'`。なければ起動、あれば巡回） | A |
+| T / Shift+T | `stack next` / `stack prev`（Y は `stack list`） | B |
+| G / Shift+G | `group next` / `group prev`（U は `group select`） | B |
+| V | `send`（別のモニタへ送る） | B |
+| Z | `undo`（直前の操作を元に戻す） | B |
+| O / P / M / S / `;` / C | `here`・`pick`・`layout`・`set`・`prompt`・前面の窓を閉じる | B〜C |
+
+- A（Claude Desktop）は、押すとアプリが起動するので、試験から外した（`focus 'クラス?'` の動き自体は、電卓と Firefox で確認した）。W・R は実機で確認した。
+
+## 4.5 新しい機能
+
+- **アプリへ飛ぶ**: `win focus 'クラス?'`（`クラス?コマンド` も可）。窓があれば前面へ、すでにそのアプリにいれば次の窓へ（ID の昇順で一巡）、なければ起動する。`?` のない従来の `win focus` は変えていない（専用の自作拡張 `raise-claude@local` の置き換えになる。拡張は消していない）。
+- **反対のモニタ**: 窓の指定 `@monitor:other`＝前面の窓がいるのとは別のモニタ（3 枚以上なら左から右へ一巡）の、いちばん手前の窓。
+- **別のモニタへ送る**: `win send [next|prev|primary|モニタ名] [-w 窓]`。窓の位置と大きさを、モニタの作業領域に対する割合で保つ（最大化の窓は最大化のまま）。実際に動かしたときだけ、元に戻す記録を作る。
+- **元に戻す**: `win undo`（`win undo list` で一覧。直近 10 件）。`layout`・`place`・`here`・`group`（show・place・add）・旧形式の `set`・`send` が窓を動かす直前に、**動かす窓だけ**の位置・最小化・最大化・デスクトップ・重なり順・前面の窓を記録する（`~/.local/state/win/undo.json`、`WIN_UNDO` で差し替え可）。操作が起動した窓は閉じない。閉じていた窓は戻せない。実機で、`layout`・`place`・`group show`・`send` の取り消しが、位置・重なり順・前面まで完全に元に戻るのを確認した。
+- **使用の記録**: `win stats [日数|on|off|reset|path]`。コマンド名と「キー経由か手入力か」だけを 1 行ずつ追記する（引数は記録しない。`~/.local/state/win/usage.log`、`WIN_USAGE` で差し替え可）。キー経由かは、親のプロセスが `systemd` か（GNOME のカスタムショートカットは systemd の下で起動される）で見分ける。既定でオン。1 回の記録は約 8μs で、起動時間への影響は測定の誤差内（+1ms 前後）。`lsp` と `stats` 自身は数えない。`set` の中などの、プロセスの中の呼び出しは数えない。
+- **注意**: 画面のロック中は、GNOME が拡張を止めるので、Window Calls が応答しない。キーを送る試験は、窓の一覧が取れて前面の窓があることを確かめてから行う（ロック画面にキーを送らないため）。
 
 ## 5. 対話型の小窓
 

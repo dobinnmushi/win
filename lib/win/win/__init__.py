@@ -17,6 +17,10 @@ Window Calls 拡張（window-calls@domandoman.xyz）の D-Bus を呼んで、
   win place free firefox         いちばん広い空きスペースに Firefox を置く
   win stack                      前面の窓のいる位置に重なった窓を、次の層へ切り替える（prev・list も）
   win group new 作業 firefox     窓のグループ（1 つの枠を共有し、next・prev・select でタブのように切り替える）
+  win focus 'firefox?'          Firefox へ飛ぶ（なければ起動、すでにいれば次の窓へ巡回）
+  win send                       前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ）
+  win undo                       直前の操作（layout・place・here・group・set・send）を元に戻す
+  win stats                      使用の集計（コマンドごとの回数。キー経由か手入力か）
   win desktop 2                  2 番目のデスクトップへ切り替える（next・prev・list も。要 win-helper@local）
   win pick                       窓の一覧を小さく出し、j/k・矢印・Enter で選んで前面に出す
   win nav left|right|up|down     表に出ている窓の間で、その向きの窓にフォーカスを移す
@@ -27,10 +31,10 @@ Window Calls 拡張（window-calls@domandoman.xyz）の D-Bus を呼んで、
 """
 
 # パッケージとしての入口。下のモジュールを、依存の下から順に読み込む。
-from . import common, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli
+from . import common, usage, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, undo, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli
 
 # 互換: win.名前 で、すべてのモジュールの名前を引ける（試験・拡張・古い呼び出し方のため）
-for _m in (common, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli):
+for _m in (common, usage, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, undo, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli):
     globals().update({k: v for k, v in vars(_m).items() if not k.startswith('__')})
 
 main = cli.main

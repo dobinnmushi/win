@@ -124,7 +124,7 @@ AT_SELECTORS = [
     ("@left", "前面の窓の左にある窓（nav と同じ判定）"), ("@right", "前面の窓の右にある窓"),
     ("@up", "前面の窓の上にある窓"), ("@down", "前面の窓の下にある窓"),
     ("@largest", "見えている窓のうち、いちばん大きい窓"), ("@smallest", "見えている窓のうち、いちばん小さい窓"),
-    ("@monitor:", "そのモニタでいちばん手前の窓（@monitor:primary・@monitor:eDP-1 など）"),
+    ("@monitor:", "そのモニタでいちばん手前の窓（@monitor:primary・@monitor:eDP-1 など。@monitor:other は、前面の窓がいるのとは別のモニタ）"),
     ("@slot:", "いまの並び（窓の位置から逆算）の N 番目のタイルの窓（@slot:1 など。番号は layout の窓の列と同じ順。@slot:0 は前面の窓）"),
     ("@visible", "【複数】見えている窓すべて（前面に近い順）"),
     ("@others", "【複数】前面の窓以外の、見えている窓すべて"),
@@ -212,7 +212,17 @@ def at_window(wc, sel):
         name = sel.split(":", 1)[1]
         monitors, logical = display_state()
         rects = [(lm, logical_rect(lm, monitors)) for lm in logical]
-        hit = next((r for lm, r in rects if (name == "primary" and lm[4]) or name in [c[0] for c in lm[5]]), None)
+        if name == "other":                                   # 前面の窓がいるモニタの、次のモニタ（左から右へ並べた順で一巡）
+            order = sorted(rects, key=lambda t: (t[1][0], t[1][1]))
+            front = next((w for w in normal_windows(wc) if w.get("focus")), None)
+            cur = 0
+            if front is not None:
+                fx, fy, fw, fh = wc.rect(front["id"])
+                cur = next((k for k, (lm, r) in enumerate(order)
+                            if r[0] <= fx + fw / 2 < r[0] + r[2] and r[1] <= fy + fh / 2 < r[1] + r[3]), 0)
+            hit = order[(cur + 1) % len(order)][1]
+        else:
+            hit = next((r for lm, r in rects if (name == "primary" and lm[4]) or name in [c[0] for c in lm[5]]), None)
         if hit is None:
             names = [c[0] for lm, _ in rects for c in lm[5]]
             raise WinError(f"モニタが見つかりません: {name}（使えるのは primary, {', '.join(names)}）")

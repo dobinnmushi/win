@@ -13,6 +13,7 @@ from .nav import visible_windows
 from .sets import monitors_for_preview, next_monitor
 from .appstate import current_tiles, cycle_stack, find_stack, tile_order, tile_stacks
 from . import groups as grp
+from .undo import begin
 from .dialog import Dialog, Item, Map, choose
 from .configwin import run_config
 
@@ -177,6 +178,9 @@ def place_apply(wc, front, targets, index, chosen, minimize=False):
         dest = (d["x"], d["y"], d["width"], d["height"])
         dmax = bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
         dws = (by_id.get(t["id"]) or front).get("workspace", 0)
+    ent = begin(wc, "place")                  # 動かす窓の、動かす前の状態（win undo で戻す）
+    ent.add(wc, [chosen] + ([{"id": t["id"]}] if minimize and t["id"] is not None else []))
+    ent.commit()
     notice = bring_here(wc, chosen, dest, dmax, dws)
     if minimize and t["id"] is not None and t["id"] != chosen["id"]:
         wc.simple("Minimize", t["id"])       # 元の窓は後ろに残るが、--min なら最小化する

@@ -274,6 +274,15 @@ def cmd_layout(args):
         me = focused(wc)["id"]
     except WinError:
         me = None
+    from .undo import begin        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    ent = begin(wc, f"layout {args.layout}")                          # 動かす窓の、動かす前の状態（win undo で戻す）
+    for p in plan:
+        if p is not None and p[0] == "win":
+            ent.add(wc, [p[1]])
+        elif p is not None and p[0] == "group":
+            from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+            ent.add(wc, [m["id"] for m in get_group(wc, p[1])["members"]])
+    ent.commit()
     placed, results, settling, group_jobs = {}, [], [], []
     with ThreadPoolExecutor(max_workers=max(1, n)) as pool:           # 置いたあとの定着待ち（窓ごとに 0.3 秒以上）は並行して行う
         for i, (r, p) in enumerate(zip(rects, plan), 1):

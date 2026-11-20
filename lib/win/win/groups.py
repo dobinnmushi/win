@@ -12,6 +12,7 @@ import threading
 from .common import WinError
 from .dbus import focused, normal_windows
 from .placement import place_settled
+from .undo import begin
 from .appstate import find_stack
 
 GROUPS_FILE = os.environ.get("WIN_GROUPS") or os.path.join(
@@ -169,6 +170,9 @@ def add_members(wc, name, windows):
     have = {m["id"] for m in g["members"]}
     notes = []
     ws = _desktop(wc)
+    ent = begin(wc, f"group add {name}")
+    ent.add(wc, windows)
+    ent.commit()
     for w in windows:
         if w["id"] not in have:
             g["members"].append({"id": w["id"], "cls": w.get("wm_class") or ""})
@@ -226,6 +230,9 @@ def show_group(wc, name):
     g = get_group(wc, name, data)
     rect, ws, wins = group_rect(wc, g), _desktop(wc), _by_id(wc)
     members = [wins[m["id"]] for m in g["members"] if m["id"] in wins]
+    ent = begin(wc, f"group show {name}")                                     # 動かす窓の、動かす前の状態（win undo で戻す）
+    ent.add(wc, members)
+    ent.commit()
     with ThreadPoolExecutor(max_workers=max(1, len(members))) as ex:          # 置いたあとの定着待ちは、窓ごとに並行して行う
         notes = list(ex.map(lambda w: bring(wc, w, rect, ws, activate=False), members))
     act = g.get("active") if g.get("active") in wins else members[0]["id"]
@@ -254,6 +261,9 @@ def place_group_members(wc, name, rect):
 
 def place_group(wc, name, rect):
     """グループ name の枠を rect に変えて、全メンバーをそこへ置き、手前のメンバーを前面に出す。注意の一覧を返す。"""
+    ent = begin(wc, f"group place {name}")
+    ent.add(wc, [m["id"] for m in get_group(wc, name)["members"]])
+    ent.commit()
     _, active, notes = place_group_members(wc, name, rect)
     wc.simple("Activate", active["id"])
     return notes

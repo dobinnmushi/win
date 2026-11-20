@@ -511,6 +511,8 @@ def run_arrangement(wc, entry):
         ws = focused(wc).get("workspace", 0)
     except WinError:
         ws = 0
+    from .undo import begin        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    ent = begin(wc, "set")                                    # 動かす窓の、動かす前の状態（win undo で戻す）
     pool = list(reversed(normal_windows(wc)))                 # 前面が先
     used = set()
     events = []                                               # 保存順に、("note", 文) か ("job", クラス, 窓, 置く処理)
@@ -530,6 +532,7 @@ def run_arrangement(wc, entry):
                     events.append(("note", f"{cls}: 窓が見つかりません（起動コマンドも不明）"))
                 continue
             used.add(w["id"])
+            ent.add(wc, [w])
             if e.get("maximized"):
                 job = ex.submit(bring_here, wc, w, (0, 0, 0, 0), True, ws, False)
             else:
@@ -538,6 +541,7 @@ def run_arrangement(wc, entry):
                                 False, ws, False)
             events.append(("job", cls, w, job))
         events = [ev if ev[0] == "note" else ("job", ev[1], ev[2], ev[3].result()) for ev in events]
+    ent.commit()
     notes = []
     for ev in events:                                         # 重なり順は、保存順（下 → 上）に前面へ出して再現する
         if ev[0] == "note":

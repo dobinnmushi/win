@@ -8,7 +8,8 @@ from .common import WinError
 from .screen import resolve_monitor
 from .store import MONITOR_HELP
 from .placement import cmd_layout
-from .simple import cmd_focus, cmd_layouts, cmd_list, cmd_desktop
+from .simple import cmd_focus, cmd_layouts, cmd_list, cmd_desktop, cmd_stats, cmd_send, cmd_undo
+from .usage import record
 from .nav import cmd_nav
 from .sets import cmd_run, cmd_set
 from .prompt import cmd_prompt, run_nvprompt, run_prompt
@@ -33,15 +34,20 @@ def main(argv=None):
         run_tile(int(sys.argv[2]), int(sys.argv[3]))
         return 0
     ap, sub = build_parser()
+    from_shell = argv is None                             # コマンド行から（set の行などの、プロセスの中の呼び出しは数えない）
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv and not argv[0].startswith("-") and argv[0] not in sub.choices:
         load_extensions()                                 # 組み込みにない名前は、拡張の命令として探す
         if argv[0] in EXT:
+            if from_shell:
+                record(argv[0])
             try:
                 return run_ext(argv[0], argv[1:])
             except WinError as e:
                 return report_error(e)
     args = ap.parse_args(argv)
+    if from_shell:
+        record(args.cmd)
     try:
         if args.cmd in ("layout", "here", "place", "stack", "group", "pick", "prompt", "save", "run", "set"):
             resolve_monitor(getattr(args, "monitor", None))      # 基準のモニタを、最初に 1 回決める
@@ -144,6 +150,19 @@ def build_parser():
                    help="list（既定）・new 名前 [窓…]・define 名前 窓の指定…・add 名前 [窓…]・remove [窓…]・delete 名前・next|prev|show|select [名前]・place 名前 [タイル]・from-stack [タイル] [名前]")
     p.add_argument("args", nargs="*", help="動作の引数（名前・窓の指定・タイルの番号）。名前を省くと、前面の窓の属するグループ")
     p.set_defaults(fn=cmd_group)
+
+    p = sub.add_parser("send", help="前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ。next・prev・primary・モニタ名）")
+    p.add_argument("target", nargs="?", default="next", help="next（既定）・prev・primary・モニタの接続名（eDP-1 など）")
+    p.add_argument("-w", "--window", help="送る窓（省くと前面の窓）")
+    p.set_defaults(fn=cmd_send)
+
+    p = sub.add_parser("undo", help="直前の操作（layout・place・here・group・set・send）を元に戻す（list で記録の一覧）")
+    p.add_argument("what", nargs="?", default="", help="list で、元に戻せる記録の一覧")
+    p.set_defaults(fn=cmd_undo)
+
+    p = sub.add_parser("stats", help="使用の集計（直近の日数）。on・off で記録を入れ・切り、reset で消す")
+    p.add_argument("what", nargs="?", default="30", help="日数（既定 30）・on・off・reset・path")
+    p.set_defaults(fn=cmd_stats)
 
     p = sub.add_parser("desktop", help="デスクトップ（ワークスペース）の表示・切り替え（N・next・prev・list。切り替えには拡張 win-helper@local が要る）")
     p.add_argument("target", nargs="?", default="", help="デスクトップの番号（1 から）・next・prev・list。省くと、いまのデスクトップを表示")

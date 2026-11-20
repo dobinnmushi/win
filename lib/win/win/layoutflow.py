@@ -14,6 +14,7 @@ from .sets import monitors_for_preview, next_monitor
 from .prompt import save_history
 from .tilepick import fuzzy
 from .dialog import Dialog, Item, Map, window_items
+from .undo import begin
 
 TILE_PLACEHOLDER = "文字で絞り込み　先頭に ! でアプリを探して新規起動"
 TILE_HINT = "↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 ・ Ctrl+S 空ける ・ Ctrl+B 戻る ・ Esc 終了"
@@ -135,7 +136,10 @@ def tile_loop(wc, args, d, rects, area, mon):
               placeholder=TILE_PLACEHOLDER, hint=TILE_HINT)
     d.keys("Ctrl+s", "Ctrl+b")
 
+    ent = begin(wc, f"layout {args.layout}")                        # 置く窓の、置く前の状態（win undo で戻す）
+
     def place_checked(w, i):
+        ent.add(wc, [w])
         got = place_settled(wc, w["id"], rects[i])
         return (f"タイル {i + 1} の窓は希望の大きさにならず {got[2]}x{got[3]} です（最小サイズなど）" if got else "")
 
@@ -184,6 +188,7 @@ def tile_loop(wc, args, d, rects, area, mon):
         if i >= n:
             break
         show(i, notice)
+    ent.commit()
     return assigned, auto_from, procs, me, n
 
 

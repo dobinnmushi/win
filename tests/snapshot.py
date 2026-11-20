@@ -129,4 +129,7 @@ show("move_toward 端", lambda: fn("move_toward")([(0, 0, 1, 1)], 0, "Left"))
 show("Item", lambda: fn("Item")("a", "b"))
 show("Map", lambda: fn("Map")([(0, 0, 1, 1)], current=0))
 show("api_entries の名前", lambda: sorted(k for k in fn("api_entries")() if k in ("Dialog", "choose", "Dialog.events", "Item", "Map", "Event", "ask", "confirm", "pick_tile", "pick_window", "window_items")))
+rows = [{"t": 1700000000, "c": "focus", "v": "key"}, {"t": 1700000100, "c": "focus", "v": "key"}, {"t": 1700000200, "c": "layout", "v": "typed"},
+        {"t": 1700086500, "c": "focus", "v": "typed"}, {"t": 1700000300, "c": "bogus", "v": "x"}]
+show("summarize（使用の集計）", lambda: fn("summarize")(rows))
 shutil.rmtree(TMP, ignore_errors=True)

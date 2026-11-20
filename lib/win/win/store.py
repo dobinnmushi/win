@@ -170,6 +170,9 @@ MON_OPT = ("opt", "--monitor", "画面", "基準のモニタ（primary・current
 
 SIGNATURES = {
     "here": ([("pos", "窓", "窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ", True), MON_OPT], "選んだ窓を今の窓と同じ位置・大きさにして前面へ"),
+    "send": ([("pos", "送り先", "next（既定）・prev・primary・モニタの接続名", True), WIN_OPT], "前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ）"),
+    "undo": ([("pos", "対象", "list で記録の一覧。省くと直前の操作を戻す", True)], "直前の操作（layout・place・here・group・set・send）を元に戻す"),
+    "stats": ([("pos", "対象", "日数（既定 30）・on・off・reset・path", True)], "使用の集計。on・off で記録を入れ・切り、reset で消す"),
     "group": ([("pos", "動作", "list（既定）・new・define・add・remove・delete・next・prev・show・select・place・from-stack", True),
                ("rep", "引数", "名前・窓の指定・タイルの番号（動作による）。名前を省くと、前面の窓の属するグループ", True), MON_OPT],
               "窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）"),
