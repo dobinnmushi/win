@@ -1,5 +1,7 @@
 # win の設計メモ（2026-11-21 時点）
 
+公開・個人設定との切り分けの検討は `docs/publishing.md`。
+
 GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道具。本体は Python のパッケージ（`lib/win/win/`）、起動役は `bin/win`。
 
 ## 1. 全体の構成
