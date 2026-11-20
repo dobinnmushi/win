@@ -6,9 +6,10 @@ GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道�
 
 ```
 bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
-lib/win/win/            本体（23 のモジュール）
-tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
+lib/win/win/            本体（24 のモジュール）
+tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・helper_test.py（拡張の D-Bus の約束の試験）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
 docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）
+extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と install.sh
 ~/.config/win/          利用者の設定: commands.toml・sets.toml・layouts.toml（任意）・ext/（拡張の Python）
 ```
 
@@ -23,6 +24,7 @@ docs/                   design.md（この文書）・interactive-design.md（�
 |  | `layouts` | 型の式（full / v(...) / h(...)・略記）の解析とタイルの計算 |
 |  | `shortcuts` | GNOME のカスタムショートカット（dconf）の読み書き・標準の操作の一覧 |
 |  | `dbus` | Window Calls の D-Bus・窓の一覧・窓の指定（`@left`・`@slot:N` など） |
+|  | `desktop` | デスクトップ（ワークスペース）の取得・切り替え（拡張 win-helper@local の D-Bus を呼ぶ） |
 | 保存・配置 | `store` | commands.toml・sets.toml の読み書き・コマンド書式の検査・アプリの起動コマンド |
 |  | `pickwin` | 窓の一覧の行の表示名・小窓の位置合わせ |
 |  | `placement` | 型による配置（`win layout`） |
@@ -78,7 +80,15 @@ docs/                   design.md（この文書）・interactive-design.md（�
 - **巡回**: 層は ID の昇順で一巡する（Activate だけだと、上の 2 枚を行き来するだけになるため、順を固定する）。保存するものはない。
 - **下の層の扱い**: 覆うだけ（最小化しない）。タイルの逆算・窓の一覧は、すでに覆われた窓を無視するので、そのまま動く。
 - `win stack [N] [next|prev|list]`（N=0 は前面の窓のいるタイル）。`list` は `choose` の小窓（地図に各タイルの層の数、手前の層が先頭）。ショートカットの標準の割り当て先は `win-stack-next`・`win-stack-list`。拡張からは `stack(n)`（層の一覧）・`cycle(n, d)`（d 層ずらして前面へ）。
-- 次の段階（未着手）: 名前つき・保存つきのグループ（位置が違う窓の集まりも扱う）、デスクトップ（ワークスペース）の切り替え。
+- 次の段階（未着手）: 名前つき・保存つきのグループ（位置が違う窓の集まりも扱う）。
+
+## 4.2 デスクトップ（ワークスペース）
+
+- **窓のデスクトップ**: `List` の `workspace`（0 から）と、`MoveToWorkspace`（Window Calls）で足りる。`Window.desktop`（1 から。代入すると、その窓を移す）は拡張なしで動く。`win desktop list` も、窓の一覧から数えるので、拡張なしで動く。
+- **切り替え**: Window Calls にも GNOME Shell の `Eval`（無効）にもないので、自作の Shell 拡張 `win-helper@local` が D-Bus（`org.local.WinHelper`: `Workspaces`・`Switch`・`SwitchRelative`）で公開する。`raise-claude@local` と同じ作り。win 側は `desktop.py`（`desktops()`・`switch_desktop(n)`・`switch_relative(d)`）、コマンドは `win desktop [N|next|prev|list]`、拡張からは `desktops()`・`switch_desktop(n, relative)`。拡張がなければ、導入の案内つきの `WinError`。
+- **導入**: `extension/install.sh`（~/.local/share/gnome-shell/extensions/ へ複写）。Wayland では、読み込みに再ログインが要る。`enabled-extensions` には追記済み（取り消し: `gnome-extensions disable win-helper@local`）。
+- **確認の範囲**: 拡張の D-Bus の約束は、`extension.js` の `import` の 1 行を差し替えた写しを gjs で動かし（Shell の代わりに模擬の `global`）、win 側から呼んで確認した（`tests/helper_test.py`）。**Shell への読み込みと、実際の切り替えは、再ログイン後でないと確かめられない**。
+- 方針: 動的ワークスペースでは、末尾に空のデスクトップが 1 つあるので、`count` はそれを含む。切り替えは端で一巡しない。
 
 ## 5. 対話型の小窓
 

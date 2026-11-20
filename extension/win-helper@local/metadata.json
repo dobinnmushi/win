@@ -1,0 +1,6 @@
+{
+  "uuid": "win-helper@local",
+  "name": "win helper",
+  "description": "win（~/projects/win）のための D-Bus。デスクトップ（ワークスペース）の取得と切り替えを公開する。",
+  "shell-version": ["50"]
+}

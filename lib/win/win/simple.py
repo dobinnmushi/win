@@ -5,6 +5,7 @@ from .screen import load_config
 from .layouts import LayoutParser, leaf_rects
 from .dbus import WindowCalls, find_windows, is_multi, normal_windows
 from .placement import describe
+from .desktop import desktops, switch_desktop, switch_relative
 
 
 def cmd_list(args):
@@ -43,4 +44,30 @@ def cmd_focus(args):
         wc.simple("Activate", w["id"])
     for w in group:
         print(describe(w))
+    return 0
+
+
+def cmd_desktop(args):
+    """デスクトップ（ワークスペース）の表示・切り替え。N（1 から）・next・prev・list。切り替えには拡張 win-helper@local が要る。"""
+    t = args.target
+    if t == "list":                                        # 窓の一覧から数えるので、拡張がなくても動く
+        wc = WindowCalls()
+        by = {}
+        for w in normal_windows(wc):
+            by.setdefault(w.get("workspace", 0) + 1, []).append(w)
+        here = next((w.get("workspace", 0) + 1 for w in normal_windows(wc) if w.get("in_current_workspace")), None)
+        for n in sorted(by):
+            names = ", ".join((w.get("wm_class") or "?") for w in by[n])
+            print(f"デスクトップ {n}{'（いま）' if n == here else ''}: {len(by[n])} 枚  {names}")
+        return 0
+    if t in ("next", "prev"):
+        switch_relative(1 if t == "next" else -1)
+    elif t:
+        try:
+            n = int(t)
+        except ValueError:
+            raise WinError(f"デスクトップの番号（1 から）か next・prev・list を指定してください: {t}")
+        switch_desktop(n)
+    cur, count = desktops()
+    print(f"デスクトップ {cur}/{count}")
     return 0

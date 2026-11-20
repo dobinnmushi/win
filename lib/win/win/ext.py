@@ -24,6 +24,7 @@ from .placement import launch, parse_window_spec, place_settled
 from .sets import run_entry, set_summary
 from .prompt import run_inline
 from .appstate import current_tiles, cycle_stack, find_stack, tile_order
+from .desktop import desktops, switch_desktop, switch_relative
 from .tilepick import slot_map
 from .pickers import pick_window_map
 from .dialog import Dialog, Event, Item, Map, ask, choose, confirm, pick_tile, window_items
@@ -64,6 +65,15 @@ class Window:
     def maximized(self):
         d = _wc().details(self.id)
         return bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
+
+    @property
+    def desktop(self):
+        wc = _wc()
+        return next((w.get("workspace", 0) for w in wc.list() if w["id"] == self.id), 0) + 1
+
+    @desktop.setter
+    def desktop(self, n):
+        _wc().call("MoveToWorkspace", "uu", self.id, max(0, int(n) - 1))
 
     @property
     def rect(self):
@@ -306,6 +316,11 @@ def api_cycle(n=0, d=1):
     return Window(cycle_stack(_wc(), int(n), int(d))[1])
 
 
+def api_switch_desktop(n, relative=False):
+    """n 番目（1 から）のデスクトップへ切り替える。relative なら、いまから n 個ずれたデスクトップへ。"""
+    switch_relative(int(n)) if relative else switch_desktop(int(n))
+
+
 def api_window_items(exclude=()):
     """今のワークスペースで最小化されていない窓を、一覧の行にする（value は Window）。"""
     return window_items(_wc(), exclude, wrap=Window)
@@ -540,7 +555,7 @@ def make_winapi():
                  "area": api_area, "run": api_run, "notify": api_notify, "sel": api_sel,
                  "layout": api_layout, "apply_set": api_apply_set, "run_command": api_run_command, "nav": api_nav,
                  "launch": api_launch, "layouts": api_layouts, "browse": api_browse, "term": api_term, "pick": api_pick, "slot_of": api_slot_of,
-                 "tiles": api_tiles, "slots": api_slots, "Item": Item, "Map": Map, "Event": Event, "Dialog": ApiDialog, "stack": api_stack, "cycle": api_cycle,
+                 "tiles": api_tiles, "slots": api_slots, "Item": Item, "Map": Map, "Event": Event, "Dialog": ApiDialog, "stack": api_stack, "cycle": api_cycle, "desktops": desktops, "switch_desktop": api_switch_desktop,
                  "choose": choose, "confirm": confirm, "ask": ask, "pick_tile": pick_tile, "pick_window": api_pick_window,
                  "window_items": api_window_items, "resolve": api_resolve, "Window": Window, "WinError": WinError}.items():
         setattr(m, k, v)
@@ -572,6 +587,11 @@ class Window:
     @property
     def title(self) -> str:
         \"\"\"題名。\"\"\"
+    @property
+    def desktop(self) -> int:
+        \"\"\"この窓があるデスクトップの番号（1 から）。代入すると、その窓をそのデスクトップへ移す（Window Calls だけで動く）。\"\"\"
+    @desktop.setter
+    def desktop(self, n: int) -> None: ...
     @property
     def rect(self) -> tuple[int, int, int, int]:
         \"\"\"位置と大きさ (x, y, 幅, 高さ)。代入すると窓が動く（最大化は解く）。例 w.rect = (0, 32, 960, 1048)\"\"\"
@@ -738,6 +758,12 @@ def stack(n: int = 0) -> list[Window]:
 def cycle(n: int = 0, d: int = 1) -> Window:
     \"\"\"n 番目のタイルの重なりで、いま手前の層から d 層（負なら前へ）ずらした窓を前面に出して返す。層は一巡する。重なりがなければ WinError。
     例 cycle(0)  # 前面の窓のいるタイルで、次の層を表示する\"\"\"
+def desktops() -> tuple[int, int]:
+    \"\"\"(いまのデスクトップの番号, デスクトップの数)。番号は 1 から。数は、動的ワークスペースでは末尾の空のものを含む。
+    拡張 win-helper@local が要る（なければ WinError）。\"\"\"
+def switch_desktop(n: int, relative: bool = False) -> None:
+    \"\"\"n 番目（1 から）のデスクトップへ切り替える。relative=True なら、いまから n 個（負なら前へ）ずれたデスクトップへ。
+    なければ WinError。拡張 win-helper@local が要る。\"\"\"
 def layout(expr: str, *windows: Window | str, gap: int | None = None) -> None:
     \"\"\"型 expr（名前か式。例 "lr"・"v(1,2)"・"1,2:1/1"）のタイルに、windows を順に並べる。窓の指定の文字列も書ける。
     例 layout("v(1,1)", focused(), at("@prev"))\"\"\"
@@ -941,6 +967,7 @@ API_SECTIONS = [
     ("登録したもの・win の命令を呼ぶ", ["apply_set", "run_command", "run"]),
     ("起動・通知", ["launch", "browse", "term", "notify"]),
     ("重なった窓（層）", ["stack", "cycle"]),
+    ("デスクトップ（ワークスペース）", ["desktops", "switch_desktop", "Window.desktop"]),
     ("対話型の小窓（1 回で選ぶ）", ["choose", "confirm", "ask", "pick_tile", "pick_window", "window_items", "Item", "Map"]),
     ("対話型の小窓（やり取りを回す）", ["Dialog", "Dialog.rows", "Dialog.map", "Dialog.notice", "Dialog.keys", "Dialog.text", "Dialog.events", "Event"]),
 ]

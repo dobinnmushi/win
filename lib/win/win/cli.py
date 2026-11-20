@@ -8,7 +8,7 @@ from .common import WinError
 from .screen import resolve_monitor
 from .store import MONITOR_HELP
 from .placement import cmd_layout
-from .simple import cmd_focus, cmd_layouts, cmd_list
+from .simple import cmd_focus, cmd_layouts, cmd_list, cmd_desktop
 from .nav import cmd_nav
 from .sets import cmd_run, cmd_set
 from .prompt import cmd_prompt, run_nvprompt, run_prompt
@@ -137,6 +137,10 @@ def build_parser():
     p.add_argument("n", nargs="?", default="0", help="タイルの番号（0 は前面の窓のいるタイル）")
     p.add_argument("action", nargs="?", default="next", choices=["next", "prev", "list"], help="next（既定）・prev・list（小窓で選ぶ）")
     p.set_defaults(fn=cmd_stack)
+
+    p = sub.add_parser("desktop", help="デスクトップ（ワークスペース）の表示・切り替え（N・next・prev・list。切り替えには拡張 win-helper@local が要る）")
+    p.add_argument("target", nargs="?", default="", help="デスクトップの番号（1 から）・next・prev・list。省くと、いまのデスクトップを表示")
+    p.set_defaults(fn=cmd_desktop)
 
     p = sub.add_parser("pick", help="窓の一覧を小さく出して選び、前面に出す（j/k・矢印・Enter）")
     p.add_argument("--id", action="store_true", help="前面に出さず、選んだ窓の ID だけを表示")
