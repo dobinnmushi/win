@@ -73,9 +73,9 @@ def wait_new_window(wc, before, timeout, what):
     while time.time() < deadline:
         new = [w for w in normal_windows(wc) if w["id"] not in before]
         if new:
-            time.sleep(0.5)  # 窓が落ち着くのを待つ
-            return new[-1]
-        time.sleep(0.2)
+            time.sleep(0.08)    # 同時に出た窓があれば拾う程度に待つ。長く待つと、アプリが決めた位置（別のモニタのことも）に窓が見え続ける
+            return [w for w in normal_windows(wc) if w["id"] not in before][-1]   # 移した後に大きさや位置を戻すアプリは、place_settled が確かめ直す
+        time.sleep(0.03)
     raise WinError(f"{timeout} 秒待っても新しい窓が現れませんでした: {what}")
 
 

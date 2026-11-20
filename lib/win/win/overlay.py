@@ -235,7 +235,7 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
                   [bool(t.get("free")) for t in targets], monitors_for_preview(cfg, screen)[1]))
         d.notice(notice)
 
-    chosen = None
+    chosen, placed = None, False
     with Dialog(hint=HERE_HINT, launch=True, keys=("Left", "Right"), chip="開いている窓", window_title="窓を並べる", placeholder="文字で絞り込み　先頭に！でアプリを探して新規起動",
                 screen=screen) as d:
         show(d)
@@ -250,9 +250,15 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
                 break
             elif ev.kind == "launched":
                 chosen = ev.window
+                notice = place_apply(wc, front, targets, index, chosen, minimize)   # 起動した窓は、アプリが決めた位置（別のモニタのことも）に
+                if notice:                                                          # 見え続けないよう、小窓を閉じる前にすぐ置く
+                    print(notice, file=sys.stderr)
+                placed = True
                 break
             elif ev.kind == "cancel":
                 return 0
+    if placed:
+        return 0
     if not any(w["id"] == chosen["id"] for w in normal_windows(wc)):
         raise WinError("その窓はもう閉じられました")
     time.sleep(0.2)                          # 小窓が閉じて、フォーカスが戻るのを待ってから動かす
@@ -294,7 +300,8 @@ def cmd_move(args):
 def cmd_size(args):
     wc = WindowCalls()
     for w in targets(wc, args.window):
-        wc.call("Resize", "uuu", w["id"], args.w, args.h)
+        x, y, _, _ = wc.rect(w["id"])                   # Window Calls の Resize は、窓の影の余白ぶん（CSD の窓で 25px ほど）枠を左上へずらすので、
+        wc.move_resize(w["id"], x, y, args.w, args.h)   # 枠の基準の MoveResize で、位置を保って大きさだけ変える
     return 0
 
 
