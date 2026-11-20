@@ -7,11 +7,10 @@ import sys
 from .common import WinError
 from .screen import resolve_monitor
 from .store import MONITOR_HELP
-from .pickwin import run_pick
 from .placement import cmd_layout
 from .simple import cmd_focus, cmd_layouts, cmd_list
 from .nav import cmd_nav
-from .sets import cmd_run, cmd_set, run_setpick
+from .sets import cmd_run, cmd_set
 from .prompt import cmd_prompt, run_nvprompt, run_prompt
 from .appstate import cmd_browse, cmd_save, cmd_term
 from .tilepick import run_tile, run_tilepick
@@ -21,14 +20,8 @@ from .overlay import cmd_close, cmd_config, cmd_here, cmd_move, cmd_pick, cmd_pl
 
 
 def main(argv=None):
-    if len(sys.argv) >= 2 and sys.argv[1] == "_pick":
-        run_pick()
-        return 0
     if len(sys.argv) >= 2 and sys.argv[1] == "_tilepick":
         run_tilepick()
-        return 0
-    if len(sys.argv) >= 2 and sys.argv[1] == "_setpick":
-        run_setpick()
         return 0
     if len(sys.argv) >= 2 and sys.argv[1] == "_prompt":
         run_prompt()

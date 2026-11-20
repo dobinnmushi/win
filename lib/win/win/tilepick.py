@@ -254,7 +254,8 @@ def run_tilepick():
                             scored.append((-sc, i, r))
                     scored.sort(key=lambda t: (t[0], t[1]))
                     rows = [{"act": {"act": "select", "index": i}, "title": r["title"], "sub": r.get("sub", ""),
-                             **({"icon": r["icon"]} if r.get("icon") else {})} for _, i, r in scored]
+                             **({"icon": r["icon"]} if r.get("icon") else {}),
+                             **({"num": k + 1} if d.get("numbers") and k < 9 else {})} for k, (_, i, r) in enumerate(scored)]
                     self.chip.set_text(d.get("chip") or "選ぶ")
             else:
                 mode, rows = tile_candidates(self.entry.get_text(), st["windows"], st["apps"])
@@ -264,6 +265,10 @@ def run_tilepick():
                 self.listbox.remove(r)
             for r in rows:
                 box = Gtk.Box(spacing=10, margin_top=5, margin_bottom=5, margin_start=10, margin_end=10)
+                if st["stage"] == "dialog" and st["dlg"].get("numbers"):      # 1〜9 の数字キーで直接選べる行の番号
+                    num = Gtk.Label(label=str(r.get("num", "")), width_chars=2, xalign=1)
+                    num.add_css_class("dim-label")
+                    box.append(num)
                 if "icon" in r:                               # 窓・アプリの行（型の行には出さない）
                     box.append(icon_widget(Gtk, Gdk, r["icon"]))
                 title = Gtk.Label(label=r["title"], xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END,
@@ -290,7 +295,13 @@ def run_tilepick():
             if not rows:
                 return
             sel = self.listbox.get_selected_row()
-            i = max(0, min(len(rows) - 1, (sel.get_index() if sel else 0) + d))
+            self.select_index((sel.get_index() if sel else 0) + d)
+
+        def select_index(self, i):
+            rows = st["rows"]
+            if not rows:
+                return
+            i = max(0, min(len(rows) - 1, i))
             row = self.listbox.get_row_at_index(i)
             self.listbox.select_row(row)
             adj, a = self.scroller.get_vadjustment(), row.get_allocation()
@@ -321,6 +332,29 @@ def run_tilepick():
                 act["monitor"] = scr["monitors"][st["mon"]]["name"]       # 並べる先のモニタ
             self.reply(act)
 
+        def vim_key(self, name):
+            """一覧だけの画面（vim: 入力欄なし）のキー: j/k・g/G・l（決定）・h/q（取消）・1〜9（その行を直接）。扱ったら True。"""
+            sel = self.listbox.get_selected_row()
+            cur = sel.get_index() if sel else 0
+            if name in ("j", "n"):
+                self.move(1)
+            elif name in ("k", "p"):
+                self.move(-1)
+            elif name in ("g", "Home"):
+                self.select_index(0)
+            elif name in ("G", "End"):
+                self.select_index(len(st["rows"]) - 1)
+            elif name == "l":
+                self.choose(False)
+            elif name in ("h", "q"):
+                self.reply({"act": "cancel"})
+            elif name and len(name) == 1 and name in "123456789" and int(name) <= len(st["rows"]):
+                self.select_index(int(name) - 1)
+                self.choose(False)
+            else:
+                return False
+            return True
+
         def multi_mon(self):
             return bool(scr) and len(scr["monitors"]) > 1
 
@@ -345,6 +379,7 @@ def run_tilepick():
             c = m.get("cmd")
             if c == "layouts":
                 st["stage"], st["layouts"] = "layout", m["items"]
+                self.title_lab.set_visible(True)
                 self.title_lab.set_text(self.layout_title())
                 self.entry.set_placeholder_text("型の名前で絞り込み（式も打てます: 1,2,2・1/1・v(1,h(1,1)) など）")
                 self.hint.set_text("↑↓ 選択（ミニ地図が変わる）" + (" ・ ←→ 並べる先のモニタ" if self.multi_mon() else "")
@@ -357,6 +392,7 @@ def run_tilepick():
                 self.entry.grab_focus_without_selecting()
             elif c == "tile":
                 st["stage"] = "tile"
+                self.title_lab.set_visible(True)
                 self.entry.set_placeholder_text(m.get("placeholder") or TILE_PLACEHOLDER)
                 self.hint.set_text(m.get("hint") or TILE_HINT)
                 st["windows"] = m["windows"]
@@ -382,6 +418,7 @@ def run_tilepick():
                 d = st["dlg"] = {**st.get("dlg", {}), **m} if c == "patch" else m
                 st["stage"] = "dialog"
                 self.title_lab.set_text(d.get("title") or "")
+                self.title_lab.set_visible(bool(d.get("title")))
                 self.header_lab.set_label(d.get("window_title") or "win")
                 self.hint.set_text(d.get("hint") or "")
                 self.entry.set_placeholder_text(d.get("placeholder") or "")
@@ -476,6 +513,8 @@ def run_tilepick():
                 combo = ("Ctrl+" if ctrl else "") + (name or "")
                 if name == "Escape":
                     self.reply({"act": "cancel"})
+                elif st["stage"] == "dialog" and st["dlg"].get("vim") and not ctrl and self.vim_key(name):
+                    pass
                 elif st["stage"] == "dialog" and combo in (st["dlg"].get("keys") or []) \
                         and not (state_mask & (Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK)):
                     self.reply({"act": "key", "key": combo})   # 親が受け取りたいと言ったキーは、親へ渡す

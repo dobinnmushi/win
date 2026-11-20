@@ -31,5 +31,24 @@ for path in sys.argv[1:]:
         for c in t.get_children():
             walk(c)
     walk(top)
+unused = 0
+for path in sys.argv[1:]:
+    if path.endswith(("__init__.py", "common.py")):                  # common は、他のモジュールへ渡す名前を定義する所
+        continue
+    top = symtable.symtable(open(path, encoding="utf-8").read(), path, "exec")
+    used = set()
+
+    def refs(t):
+        for s in t.get_symbols():
+            if s.is_referenced() or (t is not top and s.is_global() and s.is_referenced()):
+                used.add(s.get_name())
+        for c in t.get_children():
+            refs(c)
+    refs(top)
+    for s in top.get_symbols():
+        if s.is_imported() and s.get_name() not in used:
+            print(f"{path}: 使っていないインポート: {s.get_name()}")
+            unused += 1
+print("未使用のインポート:", unused)
 print("未定義の参照:", bad)
 sys.exit(1 if bad else 0)

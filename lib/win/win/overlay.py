@@ -7,10 +7,10 @@ from .common import WinError
 from .screen import default_screen, find_screen, load_config
 from .dbus import WindowCalls, find_windows, focused, normal_windows, targets
 from .store import icon_for_class
-from .pickwin import pick_window
+from .pickers import pick_rows
 from .placement import launch, place_settled
 from .nav import visible_windows
-from .sets import monitors_for_preview
+from .sets import monitors_for_preview, next_monitor
 from .appstate import current_tiles, tile_order
 from .dialog import Dialog, Item, Map
 from .configwin import run_config
@@ -137,12 +137,10 @@ def place_move(wc, front, screen, targets, index, d):
     if side:
         return screen, targets, min(side)[1]
     mons, cur = monitors_for_preview(load_config(), screen)
-    mx, my, mw, mh = mons[cur]["rect"]
-    nxt = [(abs(m["rect"][0] + m["rect"][2] / 2 - (mx + mw / 2)) + abs(m["rect"][1] + m["rect"][3] / 2 - (my + mh / 2)) / 4, n)
-           for n, m in enumerate(mons) if n != cur and (m["rect"][0] + m["rect"][2] / 2 - (mx + mw / 2)) * d > 0]
-    if not nxt:
+    nxt = next_monitor(mons, cur, d)
+    if nxt is None:
         return None
-    screen = find_screen(mons[min(nxt)[1]]["name"])
+    screen = find_screen(mons[nxt]["name"])
     ax, ay, aw, ah = screen.work_area(load_config())
     new, _ = place_targets(wc, front, False, screen=screen)
     # 入ってくる側の端に近く、いまの高さに近い候補へ
@@ -274,7 +272,7 @@ def cmd_pick(args):
     pool = list(reversed(normal_windows(wc)))
     if not pool:
         raise WinError("窓がありません")
-    res = pick_window(wc, pool, [], "窓を選ぶ")
+    res = pick_rows(wc, pool, [], "窓を選ぶ")
     if res is None:
         return 1
     if args.id:

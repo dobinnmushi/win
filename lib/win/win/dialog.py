@@ -64,10 +64,11 @@ class Dialog:
 
     def __init__(self, title="", *, hint=HINT, placeholder="文字で絞り込み", filter=True, entry=True, ask=False, show_list=True,
                  launch=False, highlight=False, keys=(), keep_selection=False, empty="", chip="", window_title="win",
+                 vim=False, numbers=False,
                  screen=None, wrap=None):
         self.title, self.hint, self.placeholder, self.window_title = title, hint, placeholder, window_title
         self.opts = {"filter": filter, "entry": entry, "ask": ask, "list": show_list, "launch": launch, "highlight": highlight,
-                     "keep_selection": keep_selection, "empty": empty, "chip": chip}
+                     "keep_selection": keep_selection, "empty": empty, "chip": chip, "vim": vim, "numbers": numbers}
         self._keys, self._rows, self._map, self._notice, self._text = list(keys), [], None, "", None
         self._screen, self._wrap = screen, wrap or (lambda w: w)
         self._child = self._wc = self._wid = None

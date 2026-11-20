@@ -22,7 +22,6 @@ WC_IFACE = "org.gnome.Shell.Extensions.Windows"
 TILE_APP_ID = "local.win.tile"
 
 
-PICK_APP_ID = "local.win.pick"
 
 
 PROMPT_APP_ID = "local.win.prompt"
@@ -34,7 +33,6 @@ NVPROMPT_APP_ID = "local.win.nvprompt"
 TILEPICK_APP_ID = "local.win.tilepick"
 
 
-SETPICK_APP_ID = "local.win.setpick"
 
 
 HISTORY = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "win", "history")

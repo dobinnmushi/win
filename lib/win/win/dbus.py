@@ -4,7 +4,7 @@ import json
 from gi.repository import GLib
 from gi.repository import Gio
 
-from .common import NVPROMPT_APP_ID, PICK_APP_ID, PROMPT_APP_ID, TILEPICK_APP_ID, TILE_APP_ID, WC_IFACE, WC_NAME, WC_PATH, WinError
+from .common import NVPROMPT_APP_ID, PROMPT_APP_ID, TILEPICK_APP_ID, TILE_APP_ID, WC_IFACE, WC_NAME, WC_PATH, WinError
 from .screen import display_state, load_config, logical_rect
 
 
@@ -42,7 +42,7 @@ class WindowCalls:
 
 
 def is_normal(w):
-    return w.get("window_type") == 0 and w.get("wm_class") not in (TILE_APP_ID, PICK_APP_ID, PROMPT_APP_ID, TILEPICK_APP_ID,
+    return w.get("window_type") == 0 and w.get("wm_class") not in (TILE_APP_ID, PROMPT_APP_ID, TILEPICK_APP_ID,
                                                                 NVPROMPT_APP_ID)
 
 

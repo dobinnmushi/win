@@ -681,12 +681,14 @@ class Dialog:
     placeholder: str
     def __init__(self, title: str = "", *, hint: str = "", placeholder: str = "文字で絞り込み", filter: bool = True,
                  entry: bool = True, ask: bool = False, show_list: bool = True, launch: bool = False, highlight: bool = False,
-                 keys: tuple[str, ...] = (), keep_selection: bool = False, empty: str = "", chip: str = "", window_title: str = "win") -> None:
+                 keys: tuple[str, ...] = (), keep_selection: bool = False, empty: str = "", chip: str = "", window_title: str = "win", vim: bool = False,
+                 numbers: bool = False) -> None:
         \"\"\"title: 題名。hint: 下の案内文。placeholder: 入力欄の説明。filter: 入力で行を絞り込む。entry: 入力欄を出す。
         ask: 文字を入力する画面（Enter で "text" の出来事）。show_list: 行の一覧を出す。launch: 先頭 ! でアプリを起動できる（"launched"）。
         highlight: 選択が動くたびに "highlight" の出来事を返す。keys: 受け取りたいキー（"Left"・"Right"・"Up"・"Down"・"Ctrl+s" など）。
         keep_selection: 出来事のあと、選択中の行の位置を保つ。empty: 行が 1 つもないときの文。chip: 入力欄の左の印。
-        window_title: 小窓の上の題名。\"\"\"
+        window_title: 小窓の上の題名。vim: 入力欄のない一覧のキー（j/k・g/G・l で決定・h/q で取消・1〜9 で直接）を使う。
+        numbers: 先頭の 9 行に番号を付ける（vim の 1〜9 と組み合わせる）。\"\"\"
     def rows(self, items: list[Item]) -> None:
         \"\"\"一覧の行を差し替える。\"\"\"
     def map(self, m: Map | None) -> None:
