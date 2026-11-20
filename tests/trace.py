@@ -24,6 +24,7 @@ ap.add_argument("cmd", nargs="+")
 args = ap.parse_args()
 
 wc = win.WindowCalls()
+before = {w["id"] for w in json.loads(wc.call("List")[0])}
 log, stop = [], False
 t0 = time.time()
 
@@ -40,6 +41,8 @@ def poll():
             if w.get("window_type") != 0:
                 continue
             ids.add(w["id"])
+            if w["id"] in before and not args.all and w.get("wm_class") != "local.win.tilepick":
+                continue                                   # 負荷で測定が遅れないよう、既存の窓の位置は --all のときだけ調べる
             try:
                 r = tuple(wc.rect(w["id"]))
             except Exception:
@@ -61,7 +64,6 @@ def poll():
         time.sleep(0.02)
 
 
-before = {w["id"] for w in json.loads(wc.call("List")[0])}
 th = threading.Thread(target=poll)
 th.start()
 p = subprocess.Popen(args.cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
