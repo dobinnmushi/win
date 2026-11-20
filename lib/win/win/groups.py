@@ -7,6 +7,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+import threading
 
 from .common import WinError
 from .dbus import focused, normal_windows
@@ -16,6 +17,7 @@ from .appstate import find_stack
 GROUPS_FILE = os.environ.get("WIN_GROUPS") or os.path.join(
     os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "win", "groups.json")
 RECT_TOL = 8      # 枠がこれ以内（px）しかずれていなければ、すでにグループの枠にあるとみなす
+_LOCK = threading.RLock()      # 保存の「読む → 更新 → 書く」を、このプロセスの中で 1 つずつにする（layout が複数のグループを並行して置くため）
 
 
 # ---------------------------------------------------------------- 保存
@@ -236,16 +238,18 @@ def show_group(wc, name):
 def place_group_members(wc, name, rect):
     """グループ name の枠を rect に変えて、全メンバーをそこへ置く（前面には出さない）。(メンバーの窓, 手前のメンバーの窓, 注意の一覧) を返す。
     layout のタイルにグループを置くときも、これを使う。"""
-    data = load_groups(wc)
-    g = get_group(wc, name, data)
-    g["rect"] = list(rect)
-    g["active"] = g["active"] if g.get("active") is not None else g["members"][0]["id"]
-    _write(data)
+    with _LOCK:
+        data = load_groups(wc)
+        g = get_group(wc, name, data)
+        g["rect"] = list(rect)
+        g["active"] = g["active"] if g.get("active") is not None else g["members"][0]["id"]
+        _write(data)
+        active_id, member_ids = g["active"], [m["id"] for m in g["members"]]
     wins, ws = _by_id(wc), _desktop(wc)
-    members = [wins[m["id"]] for m in g["members"] if m["id"] in wins]
+    members = [wins[i] for i in member_ids if i in wins]
     with ThreadPoolExecutor(max_workers=max(1, len(members))) as ex:
         notes = list(ex.map(lambda w: bring(wc, w, rect, ws, activate=False), members))
-    return members, wins[g["active"]], [n for n in notes if n]
+    return members, wins[active_id], [n for n in notes if n]
 
 
 def place_group(wc, name, rect):

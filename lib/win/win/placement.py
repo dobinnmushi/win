@@ -188,11 +188,16 @@ def cmd_layout(args):
             raise WinError(f"タイルは {n} 枚ですが、窓の指定が {len(sels)} 個あります")
         pool = usable_windows(wc)
         taken = set()
+        seen_groups = {}
         for i, sel in enumerate(sels):                            # グループのメンバーは、ほかのタイルの窓として拾わない（指定の順に関係なく）
             if sel.lower().startswith("@group:"):
                 from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+                gname = sel.split(":", 1)[1]
+                if gname in seen_groups:
+                    raise WinError(f"グループ {gname} は、タイル {seen_groups[gname]} とタイル {i + 1} の両方には置けません")
+                seen_groups[gname] = i + 1
                 try:
-                    taken |= {m["id"] for m in get_group(wc, sel.split(":", 1)[1])["members"]}
+                    taken |= {m["id"] for m in get_group(wc, gname)["members"]}
                 except WinError as e:
                     raise WinError(f"タイル {i + 1}: {e}")
         for i, sel in enumerate(sels):

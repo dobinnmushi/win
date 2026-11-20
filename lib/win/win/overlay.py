@@ -272,9 +272,10 @@ def _windows_from(wc, specs):
     return out
 
 
-def resolve_specs(wc, specs):
-    """窓の指定（layout の窓の列と同じ書き方。クラス?・クラス?コマンド・!コマンド・@ の指定）を窓にする。同じ窓は 2 度使わない。"""
-    pool, taken, out = list(reversed(normal_windows(wc))), set(), []
+def resolve_specs(wc, specs, exclude=()):
+    """窓の指定（layout の窓の列と同じ書き方。クラス?・クラス?コマンド・!コマンド・@ の指定）を窓にする。同じ窓は 2 度使わない。
+    exclude の ID の窓は、当たっても使わない。"""
+    pool, taken, out = list(reversed(normal_windows(wc))), set(exclude), []
     for sel in specs:
         if sel.startswith("!"):
             w = launch(wc, sel[1:])
@@ -330,7 +331,8 @@ def cmd_group(args):
         name = need_name()
         if len(a) < 2:
             raise WinError("窓の指定が要ります（win group define 名前 窓の指定…）")
-        wins = resolve_specs(wc, a[1:])
+        others = {m["id"] for n, g in grp.load_groups(wc).items() if n != name for m in g["members"]}      # ほかのグループのメンバーは拾わない
+        wins = resolve_specs(wc, a[1:], others)
         grp.define_group(wc, name, wins)
         print(f"グループ {name} を定義しました（{len(wins)} 枚）")
         return 0
