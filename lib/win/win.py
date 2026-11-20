@@ -3637,11 +3637,33 @@ def set_preview(c, cfg):
     return tiles
 
 
+def monitors_for_preview(cfg):
+    """プレビューに描く各モニタ {"name", "rect", "work"} と、基準モニタの添字。取れなければ ([], 0)。"""
+    try:
+        monitors, logical = display_state()
+    except WinError:
+        return [], 0
+    base = tuple(monitor_rect())
+    out, cur = [], 0
+    for lm in logical:
+        x, y, w, h = rect = logical_rect(lm, monitors)
+        i = dict(cfg["insets"])
+        if not lm[4]:
+            i["top"] = 0                                   # work_area と同じ。上部バーの余白は主モニタだけ
+        if rect == base:
+            cur = len(out)
+        out.append({"name": lm[5][0][0], "rect": list(rect),
+                    "work": [x + i["left"], y + i["top"], w - i["left"] - i["right"], h - i["top"] - i["bottom"]]})
+    return out, cur
+
+
 def pick_set(wc, cfg, sets):
-    """名前で絞り込みながら、プレビューを見て選ぶ小窓。選ばれたセットの名前（取消は None）。"""
+    """名前で絞り込みながら、プレビューを見て選ぶ小窓。(選ばれたセットの名前, 選ばれたモニタの接続名)。取消は (None, None)。
+    モニタが 1 枚なら接続名は None（基準のモニタのまま）。"""
     ax, ay, aw, ah = work_area(cfg)
+    mons, cur = monitors_for_preview(cfg)
     spec = {"sets": [{"name": n, "summary": set_summary(c)[:90], "tiles": set_preview(c, cfg)} for n, c in sets.items()],
-            "ratio": aw / ah}
+            "ratio": aw / ah, "monitors": mons, "current": cur}
     proc = subprocess.Popen([sys.executable, WIN_BIN, "_setpick"],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     proc.stdin.write(json.dumps(spec))
@@ -3654,8 +3676,10 @@ def pick_set(wc, cfg, sets):
             res = json.loads(line)
         except ValueError:
             continue
-        return res.get("name") if res.get("act") == "set" else None
-    return None
+        if res.get("act") == "set":
+            return res.get("name"), res.get("monitor")
+        return None, None
+    return None, None
 
 
 def run_setpick():
@@ -3666,8 +3690,12 @@ def run_setpick():
 
     spec = json.load(sys.stdin)
     sets, ratio = spec["sets"], spec.get("ratio") or 1.6
-    PW = 340
-    PH = max(120, int(PW / ratio))
+    mons = spec.get("monitors") or [{"name": None, "rect": [0, 0, ratio * 1000, 1000], "work": [0, 0, ratio * 1000, 1000]}]
+    bx, by = min(m["rect"][0] for m in mons), min(m["rect"][1] for m in mons)         # 全モニタを囲む枠
+    bw, bh = max(m["rect"][0] + m["rect"][2] for m in mons) - bx, max(m["rect"][1] + m["rect"][3] for m in mons) - by
+    k = min(340 / bw, 200 / bh)                         # 縦横比を保って 340x200 に収める
+    PW, PH = max(120, round(bw * k)), max(60, round(bh * k))
+    st = {"set": None, "mon": min(max(spec.get("current") or 0, 0), len(mons) - 1)}
 
     class App(Adw.Application):
         def __init__(self):
@@ -3681,7 +3709,10 @@ def run_setpick():
             css = Gtk.CssProvider()
             css.load_from_string(".tile-box { border: 1px solid alpha(currentColor, .4); border-radius: 4px; "
                                  "background: alpha(@accent_bg_color, .18); font-size: 9pt; } "
-                                 ".preview-frame { background: alpha(currentColor, .06); border-radius: 6px; }")
+                                 ".preview-frame { background: alpha(currentColor, .06); border-radius: 6px; } "
+                                 ".screen-box { background: alpha(currentColor, .05); border: 1px solid alpha(currentColor, .18); "
+                                 "border-radius: 3px; } "
+                                 ".screen-box.cur { background: alpha(currentColor, .09); border: 2px solid alpha(@accent_bg_color, .9); }")
             Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
                                                       Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
             entry = Gtk.Entry(hexpand=True, placeholder_text="セットの名前で絞り込み…")
@@ -3702,19 +3733,43 @@ def run_setpick():
             side.append(caption)
             shown = []                                    # 表示中の行 → sets の添字
 
-            def draw(i):
+            def draw(i=-1):
+                if i != -1:
+                    st["set"] = i
+                i = st["set"]
                 while (c := preview.get_first_child()) is not None:
                     preview.remove(c)
+                for n, m in enumerate(mons):                   # 画面全体を薄く描き、適用先のモニタだけ強調する
+                    mx, my, mw, mh = m["rect"]
+                    box = Gtk.Box()
+                    box.add_css_class("screen-box")
+                    if n == st["mon"]:
+                        box.add_css_class("cur")
+                    box.set_size_request(max(4, round(mw * k)), max(4, round(mh * k)))
+                    preview.put(box, round((mx - bx) * k), round((my - by) * k))
                 if i is None:
                     caption.set_label("")
                     return
+                wx, wy, ww, wh = mons[st["mon"]]["work"]      # タイルの座標は作業領域に対する割合
                 tiles = sets[i]["tiles"]
                 for t in tiles:
                     lab = Gtk.Label(label=t["label"], ellipsize=3, max_width_chars=10)
                     lab.add_css_class("tile-box")
-                    lab.set_size_request(max(8, int(t["w"] * PW) - 2), max(8, int(t["h"] * PH) - 2))
-                    preview.put(lab, int(t["x"] * PW) + 1, int(t["y"] * PH) + 1)
-                caption.set_label(sets[i]["summary"] if tiles else "プレビューを作れません: " + sets[i]["summary"])
+                    lab.set_size_request(max(8, round(t["w"] * ww * k) - 2), max(8, round(t["h"] * wh * k) - 2))
+                    preview.put(lab, round((wx + t["x"] * ww - bx) * k) + 1, round((wy + t["y"] * wh - by) * k) + 1)
+                where = f"適用先: {mons[st['mon']]['name']}\n" if len(mons) > 1 else ""
+                caption.set_label(where + (sets[i]["summary"] if tiles else "プレビューを作れません: " + sets[i]["summary"]))
+
+            def move_mon(d):
+                """いまのモニタから見て、左（d=-1）・右（d=1）にいちばん近いモニタへ。なければそのまま（並び順ではなく実際の位置）。"""
+                def center(m):
+                    return m["rect"][0] + m["rect"][2] / 2, m["rect"][1] + m["rect"][3] / 2
+                cx, cy = center(mons[st["mon"]])
+                side = [(abs(center(m)[0] - cx) + abs(center(m)[1] - cy) / 4, n) for n, m in enumerate(mons)
+                        if n != st["mon"] and (center(m)[0] - cx) * d > 0]
+                if side:
+                    st["mon"] = min(side)[1]
+                    draw()
 
             def refresh(*_):
                 while (r := listbox.get_row_at_index(0)) is not None:
@@ -3748,7 +3803,8 @@ def run_setpick():
             def decide():
                 sel = listbox.get_selected_row()
                 if sel is not None:
-                    self.finish({"act": "set", "name": sets[shown[sel.get_index()]]["name"]})
+                    self.finish({"act": "set", "name": sets[shown[sel.get_index()]]["name"],
+                                 "monitor": mons[st["mon"]]["name"] if len(mons) > 1 else None})
 
             listbox.connect("row-selected", lambda _l, r: draw(shown[r.get_index()]) if r is not None else None)
             listbox.connect("row-activated", lambda _l, _r: decide())
@@ -3764,6 +3820,8 @@ def run_setpick():
                     move(1)
                 elif name in ("Up", "ISO_Left_Tab") or (ctrl and name in ("p", "k")):
                     move(-1)
+                elif name in ("Left", "Right") and len(mons) > 1 and not (state & ~Gdk.ModifierType.LOCK_MASK):
+                    move_mon(1 if name == "Right" else -1)
                 else:
                     return False
                 return True
@@ -3773,7 +3831,8 @@ def run_setpick():
             body.append(side)
             top = Gtk.Box(margin_top=10, margin_start=12, margin_end=12, margin_bottom=8)
             top.append(entry)
-            hint = Gtk.Label(label="入力で絞り込み ・ ↑↓ で選ぶ ・ Enter で適用 ・ Esc で閉じる", margin_top=8, margin_bottom=10)
+            hint = Gtk.Label(label="入力で絞り込み ・ ↑↓ で選ぶ" + (" ・ ←→ でモニタを選ぶ" if len(mons) > 1 else "")
+                             + " ・ Enter で適用 ・ Esc で閉じる", margin_top=8, margin_bottom=10)
             hint.add_css_class("dim-label")
             hint.add_css_class("caption")
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -3802,9 +3861,11 @@ def cmd_set(args):
     if name is None:
         if not sets:
             raise WinError("セットがありません（win save 名前 で、いまの窓の並びを保存できます）")
-        name = pick_set(wc, load_config(), sets)
+        name, monitor = pick_set(wc, load_config(), sets)
         if name is None:
             return 1
+        if monitor:
+            resolve_monitor(monitor)                      # 小窓で選んだモニタを基準にして適用する（行に -m があればそちらが優先）
     elif name not in sets:
         if name in load_commands():
             raise WinError(f"「{name}」はセットではありません（win run {shlex.quote(name)} で実行できます）")
