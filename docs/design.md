@@ -43,14 +43,14 @@ win で呼べる名前つきの操作（アクション）は、実装の入れ�
 ## パッケージの構成（lib/win/win/）
 
 `~/.local/bin/win` は `bin/win`（起動役）へのリンクで、起動役は自分の実体の位置から `lib/win/` を見つけて `import win` する。
-本体は 20 のモジュール。依存は下から上へ向かい、下のモジュールは上のモジュールを読み込まない。
+本体は 21 のモジュール。依存は下から上へ向かい、下のモジュールは上のモジュールを読み込まない。
 
 | 層（下 → 上） | モジュール |
 |---|---|
 | 基礎 | `common`（定数・標準ライブラリ）、`screen`（Screen・作業領域・設定の読み込み）、`layouts`（型の式・タイルの計算）、`shortcuts`（GNOME のカスタムショートカット）、`dbus`（Window Calls・窓の指定） |
 | 保存・配置 | `store`（commands.toml・sets.toml）、`pickwin`（窓の一覧の小窓）、`placement`（win layout）、`simple`（list・focus・move・size・state・close）、`textui`、`nav` |
 | 状態・セット | `sets`、`prompt`（コマンド入力の小窓・補完）、`appstate`（いまの並びの逆算・Firefox/端末の状態） |
-| 小窓・拡張 | `tilepick`（絞り込みの小窓）、`ext`（拡張と winapi）、`lsp` |
+| 小窓・拡張 | `tilepick`（絞り込みの小窓）、`dialog`（Dialog と 1 回で選ぶ関数）、`ext`（拡張と winapi）、`lsp` |
 | 画面・入口 | `configwin`（設定の窓）、`overlay`（place・here）、`cli`（main・build_parser） |
 
 - 逆向きの依存（下のモジュールが上のモジュールの関数を使う 18 か所）は、使う関数の中での遅延インポートにしてある（`# 逆向きの依存` の印つき）。モジュール直下（定数・クラス本体・デコレータ）の参照は、必ず下向き。
@@ -65,4 +65,4 @@ win で呼べる名前つきの操作（アクション）は、実装の入れ�
 
 ## 既知の課題（今後）
 
-- 対話型の小窓の作りが、用途ごとに別々（`tilepick`・`setpick`・`pick`・`prompt`・`config`）。拡張から使える共通の部品にしたい（検討中）。
+- 対話型の小窓は、`dialog.Dialog` に寄せ始めた（`place`・`here` が乗っている）。`layout` の 2 段階・`set`（`_setpick`）・`pick`（`_pick`）は、まだ別の作り。詳細は `docs/interactive-design.md`。

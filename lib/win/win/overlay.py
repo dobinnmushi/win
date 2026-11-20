@@ -1,20 +1,18 @@
 """置き先に窓を重ねる（win place・win here）。"""
 
-import json
-import subprocess
 import sys
 import time
 
-from .common import TILEPICK_APP_ID, WinError
+from .common import WinError
 from .screen import default_screen, find_screen, load_config
 from .dbus import WindowCalls, find_windows, focused, normal_windows, targets
 from .store import icon_for_class
-from .pickwin import center_and_focus, pick_window
+from .pickwin import pick_window
 from .placement import launch, place_settled
 from .nav import visible_windows
 from .sets import monitors_for_preview
 from .appstate import current_tiles, tile_order
-from .tilepick import launch_app, list_apps, spawn_tilepick
+from .dialog import Dialog, Item, Map
 from .configwin import run_config
 
 
@@ -224,76 +222,41 @@ def cmd_here(args):
 
 
 def gui_place(wc, front, screen, targets, index, minimize=False):
-    """絞り込みの小窓で窓（先頭 ! でアプリ）を選び、置き先と同じ形にして前面に出す。左右矢印で置き先を隣の候補
+    """絞り込みの小窓（Dialog）で窓（先頭 ! でアプリ）を選び、置き先と同じ形にして前面に出す。左右矢印で置き先を隣の候補
     （端を越えたら隣のモニタ）へ動かせる。"""
     cfg = load_config()
-    child = spawn_tilepick()
 
-    def send(msg):
-        child.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")
-        child.stdin.flush()
-
-    def candidates():
-        tid = targets[index]["id"]
-        return [w for w in reversed(normal_windows(wc)) if w["id"] != tid]
-
-    def tile(notice="", first=False):
-        mons, mon = monitors_for_preview(cfg, screen)
+    def show(d, notice=""):
+        """いまの置き先に合わせて、題名・候補の窓（置き先の窓自身は除く）・地図を渡す。"""
         t = targets[index]
-        title = ("ここに持ってくる" if t["id"] == front["id"] else
-                 "空きスペースに持ってくる" if t.get("free") else f"タイル {index + 1}（{t['label']}）に持ってくる")
-        msg = {"cmd": "tile", "index": index, "n": len(targets), "layout": "", "title": title, "hint": HERE_HINT,
-               "rects": [t["norm"] for t in targets], "labels": [t["label"] if n != index else "" for n, t in enumerate(targets)],
-               "free": [bool(t.get("free")) for t in targets],
-               "windows": [{"id": w["id"], "cls": w.get("wm_class") or "", "title": window_row_title(w, wc.details(w["id"])),
-                            "icon": icon_for_class(w.get("wm_class"))} for w in candidates()],
-               "notice": notice, "movable": True, "mon": mon}
-        if first:
-            msg["apps"] = list_apps()
-        return msg
+        d.title = ("ここに持ってくる" if t["id"] == front["id"] else
+                   "空きスペースに持ってくる" if t.get("free") else f"タイル {index + 1}（{t['label']}）に持ってくる")
+        d.rows([Item(window_row_title(w, wc.details(w["id"])), w.get("wm_class") or "", icon_for_class(w.get("wm_class")), w)
+                for w in reversed(normal_windows(wc)) if w["id"] != t["id"]])
+        d.map(Map([t["norm"] for t in targets], [t["label"] if n != index else "" for n, t in enumerate(targets)], index,
+                  [bool(t.get("free")) for t in targets], monitors_for_preview(cfg, screen)[1]))
+        d.notice(notice)
 
     chosen = None
-    try:
-        send(tile(first=True))
-        wid = center_and_focus(wc, child, TILEPICK_APP_ID)
-        while True:
-            line = child.stdout.readline()
-            try:
-                res = json.loads(line) if line else {"act": "cancel"}
-            except ValueError:
-                res = {"act": "cancel"}
-            act = res.get("act")
-            try:
-                if act == "target":
-                    moved = place_move(wc, front, screen, targets, index, res.get("dir", 0))
-                    if moved:
-                        screen, targets, index = moved
-                    send(tile("" if moved else "その向きに置き先はありません"))
-                    wc.simple("Activate", wid)
-                    continue
-                if act == "win":
-                    chosen = next((w for w in candidates() if w["id"] == res["id"]), None)
-                    if chosen is None:
-                        raise WinError("その窓はもう閉じられました")
-                elif act in ("app", "cmd"):
-                    send({"cmd": "busy", "text": "起動しています…"})
-                    chosen = launch_app(wc, res["id"], 12)[0] if act == "app" else launch(wc, res["text"], 12)
-                else:
-                    return 0
-            except WinError as e:
-                send(tile(str(e)))
-                wc.simple("Activate", wid)
-                continue
-            break
-    finally:
-        try:
-            send({"cmd": "quit"})
-        except (OSError, ValueError):
-            pass
-        try:
-            child.wait(3)
-        except subprocess.TimeoutExpired:
-            child.kill()
+    with Dialog(hint=HERE_HINT, launch=True, keys=("Left", "Right"), chip="開いている窓", window_title="窓を並べる", placeholder="文字で絞り込み　先頭に！でアプリを探して新規起動",
+                screen=screen) as d:
+        show(d)
+        for ev in d.events():
+            if ev.kind == "key":
+                moved = place_move(wc, front, screen, targets, index, 1 if ev.key == "Right" else -1)
+                if moved:
+                    screen, targets, index = moved
+                show(d, "" if moved else "その向きに置き先はありません")
+            elif ev.kind == "select":
+                chosen = ev.item.value
+                break
+            elif ev.kind == "launched":
+                chosen = ev.window
+                break
+            elif ev.kind == "cancel":
+                return 0
+    if not any(w["id"] == chosen["id"] for w in normal_windows(wc)):
+        raise WinError("その窓はもう閉じられました")
     time.sleep(0.2)                          # 小窓が閉じて、フォーカスが戻るのを待ってから動かす
     notice = place_apply(wc, front, targets, index, chosen, minimize)
     if notice:

@@ -25,6 +25,8 @@ from .sets import run_entry, set_summary
 from .prompt import run_inline
 from .appstate import current_tiles, tile_order
 from .tilepick import pick_interactive, slot_map
+from .dialog import Dialog, Event, Item, Map, ask, choose, confirm, pick_tile, window_items
+from .dialog import pick_window as pick_window_dialog
 
 
 EXT_DIR = os.environ.get("WIN_EXT") or os.path.join(os.path.dirname(COMMANDS), "ext")
@@ -282,6 +284,27 @@ def api_resolve(spec):
     raise WinError(f"窓が見つかりません: {spec}")
 
 
+class ApiDialog(Dialog):
+    """拡張向けの Dialog（窓は Window で返す）。"""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("wrap", Window)
+        super().__init__(*args, **kwargs)
+
+
+ApiDialog.__name__ = ApiDialog.__qualname__ = "Dialog"
+
+
+def api_window_items(exclude=()):
+    """今のワークスペースで最小化されていない窓を、一覧の行にする（value は Window）。"""
+    return window_items(_wc(), exclude, wrap=Window)
+
+
+def api_pick_window(title="窓を選ぶ", *, launch=True, exclude=(), map=None):
+    """窓を 1 枚選ぶ。選んだ窓、Esc なら None。"""
+    return pick_window_dialog(title, launch=launch, exclude=exclude, map=map, wrap=Window)
+
+
 def api_pick(title="窓を選ぶ", slot=None, launch=True, exclude=(), rect=None):
     """layout -i と同じ小窓で、窓を 1 枚その場で選ぶ（先頭 ! でアプリを起動して、その窓）。取り消したら WinError。"""
     wc, rects, labels, index = _wc(), None, None, 0
@@ -506,7 +529,9 @@ def make_winapi():
                  "area": api_area, "run": api_run, "notify": api_notify, "sel": api_sel,
                  "layout": api_layout, "apply_set": api_apply_set, "run_command": api_run_command, "nav": api_nav,
                  "launch": api_launch, "layouts": api_layouts, "browse": api_browse, "term": api_term, "pick": api_pick, "slot_of": api_slot_of,
-                 "tiles": api_tiles, "slots": api_slots, "resolve": api_resolve, "Window": Window, "WinError": WinError}.items():
+                 "tiles": api_tiles, "slots": api_slots, "Item": Item, "Map": Map, "Event": Event, "Dialog": ApiDialog,
+                 "choose": choose, "confirm": confirm, "ask": ask, "pick_tile": pick_tile, "pick_window": api_pick_window,
+                 "window_items": api_window_items, "resolve": api_resolve, "Window": Window, "WinError": WinError}.items():
         setattr(m, k, v)
     return m
 
@@ -516,7 +541,7 @@ WINAPI_STUB = '''\"\"\"win の拡張用の関数群（型の定義）。win が�
 拡張は、このディレクトリに .py を置いて書きます。@command を付けた関数が win の命令になり、
 win prompt・`win 名前`・ショートカット・登録したコマンドから呼べます。
 \"\"\"
-from typing import Callable, TypeVar, overload
+from typing import Callable, Iterator, TypeVar, overload
 
 _F = TypeVar("_F", bound=Callable[..., object])
 
@@ -610,6 +635,89 @@ def pick(title: str = "窓を選ぶ", slot: int | None = None, launch: bool = Tr
     exclude の窓は一覧に出さない（2 つめを選ぶときに 1 つめを除く、など）。rect を渡すと、
     まだ窓のない場所（分けたばかりのタイルなど）を地図に足して強調する。引数を省いたら選ばせる例:
     def place(n: int, w: Window | None = None): w = w or pick(f"タイル {n} に置く窓", slot=n)\"\"\"
+
+class Item:
+    \"\"\"一覧の 1 行。value は選ばれたときに返ってくる値（任意）。\"\"\"
+    label: str
+    sub: str
+    icon: str
+    value: object
+    def __init__(self, label: str, sub: str = "", icon: str = "", value: object = None) -> None: ...
+
+class Map:
+    \"\"\"ミニ地図。rects は作業領域に対する割合の (x, y, 幅, 高さ) のリスト（tiles() の結果を、作業領域で割った値）。
+    labels は各タイルの文字、current は強調するタイルの添字（-1 で強調なし）、free は点線にするタイルの真偽のリスト、
+    monitor は、その作業領域があるモニタの添字（複数のモニタを並べて描くとき）。\"\"\"
+    rects: list[tuple[float, float, float, float]]
+    labels: list[str] | None
+    current: int
+    free: list[bool] | None
+    monitor: int | None
+    def __init__(self, rects: list[tuple[float, float, float, float]], labels: list[str] | None = None, current: int = -1,
+                 free: list[bool] | None = None, monitor: int | None = None) -> None: ...
+
+class Event:
+    \"\"\"Dialog から返ってくる出来事。kind は "select"（行を決めた。item・index・via="enter" か "tab"）・"key"（key）・"text"（text）・
+    "highlight"（選択が動いた。item・index。highlight=True のとき）・"launched"（! でアプリを起動した。window がその窓）・"cancel"。\"\"\"
+    kind: str
+    item: Item | None
+    index: int | None
+    via: str | None
+    key: str | None
+    text: str | None
+    window: Window | None
+
+class Dialog:
+    \"\"\"対話型の小窓。with で開き、events() で出来事を 1 つずつ受け取り、出来事に応じて行・地図・通知を更新する（小窓は描画だけ、状態は拡張が持つ）。
+    出来事を受け取ったあと、次を待つ前に、更新した内容が小窓へ渡る。キーは keys に挙げたものだけが "key" の出来事になる。例（地図の上で置き先を選ぶ）:
+    with Dialog("置き先を選ぶ", entry=False, keys=("Left", "Right")) as d:
+        d.rows([Item("ここに決める")]); d.map(Map(rects, current=i))
+        for ev in d.events():
+            if ev.kind == "key": i += 1 if ev.key == "Right" else -1; d.map(Map(rects, current=i))
+            elif ev.kind == "select": return i
+            elif ev.kind == "cancel": return None\"\"\"
+    title: str
+    hint: str
+    placeholder: str
+    def __init__(self, title: str = "", *, hint: str = "", placeholder: str = "文字で絞り込み", filter: bool = True,
+                 entry: bool = True, ask: bool = False, show_list: bool = True, launch: bool = False, highlight: bool = False,
+                 keys: tuple[str, ...] = (), keep_selection: bool = False, empty: str = "", chip: str = "", window_title: str = "win") -> None:
+        \"\"\"title: 題名。hint: 下の案内文。placeholder: 入力欄の説明。filter: 入力で行を絞り込む。entry: 入力欄を出す。
+        ask: 文字を入力する画面（Enter で "text" の出来事）。show_list: 行の一覧を出す。launch: 先頭 ! でアプリを起動できる（"launched"）。
+        highlight: 選択が動くたびに "highlight" の出来事を返す。keys: 受け取りたいキー（"Left"・"Right"・"Up"・"Down"・"Ctrl+s" など）。
+        keep_selection: 出来事のあと、選択中の行の位置を保つ。empty: 行が 1 つもないときの文。chip: 入力欄の左の印。
+        window_title: 小窓の上の題名。\"\"\"
+    def rows(self, items: list[Item]) -> None:
+        \"\"\"一覧の行を差し替える。\"\"\"
+    def map(self, m: Map | None) -> None:
+        \"\"\"ミニ地図を差し替える（None で隠す）。\"\"\"
+    def notice(self, text: str) -> None:
+        \"\"\"赤字の通知を出す（"" で消す）。\"\"\"
+    def keys(self, *names: str) -> None:
+        \"\"\"親へ渡してほしいキーを差し替える。\"\"\"
+    def text(self, value: str) -> None:
+        \"\"\"入力欄の文字を置き換える（次に小窓へ渡すとき 1 回だけ）。\"\"\"
+    def events(self) -> Iterator[Event]:
+        \"\"\"小窓を開いて、出来事を 1 つずつ返す。取り消す（Esc）と "cancel" の出来事を返して終わる。\"\"\"
+    def __enter__(self) -> Dialog: ...
+    def __exit__(self, *exc: object) -> bool: ...
+
+def window_items(exclude: list[Window] = []) -> list[Item]:
+    \"\"\"今のワークスペースで最小化されていない窓を、一覧の行にする（前面に近い順。value は Window）。exclude の窓は除く。\"\"\"
+def choose(title: str, items: list[Item], *, preview: Callable[[Item], Map] | None = None, placeholder: str = "文字で絞り込み",
+           hint: str = "", filter: bool = True) -> Item | None:
+    \"\"\"一覧から 1 つ選ぶ。選んだ Item、Esc なら None。preview(item) -> Map を渡すと、選択が動くたびにミニ地図を出す。
+    例 x = choose("型を選ぶ", [Item(n, e) for n, e in layouts().items()])\"\"\"
+def confirm(title: str, text: str = "", *, yes: str = "はい", no: str = "いいえ") -> bool:
+    \"\"\"はい・いいえを選ぶ。はいなら True（Esc は False）。\"\"\"
+def ask(title: str, *, placeholder: str = "", initial: str = "", hint: str = "") -> str | None:
+    \"\"\"1 行の文字を入力する。入力した文字、Esc なら None。\"\"\"
+def pick_tile(title: str, rects: list[tuple[float, float, float, float]], *, labels: list[str] | None = None, current: int = 0,
+              free: list[bool] | None = None, monitor: int | None = None) -> int | None:
+    \"\"\"ミニ地図の上でタイルを選ぶ（矢印キーで、その向きの隣のタイルへ）。選んだタイルの添字、Esc なら None。\"\"\"
+def pick_window(title: str = "窓を選ぶ", *, launch: bool = True, exclude: list[Window] = [], map: Map | None = None) -> Window | None:
+    \"\"\"窓を 1 枚選ぶ（launch なら、先頭 ! でアプリを起動してその窓）。選んだ窓、Esc なら None（pick と違い、例外にしない）。
+    map を渡すと、ミニ地図も出す。\"\"\"
 
 def layout(expr: str, *windows: Window | str, gap: int | None = None) -> None:
     \"\"\"型 expr（名前か式。例 "lr"・"v(1,2)"・"1,2:1/1"）のタイルに、windows を順に並べる。窓の指定の文字列も書ける。
@@ -777,9 +885,15 @@ def api_entries():
             ret = f" -> {ast.unparse(node.returns)}" if node.returns else ""
             out[node.name] = (f"{node.name}({ast.unparse(node.args)}){ret}", ast.get_docstring(node) or "")
         elif isinstance(node, ast.ClassDef):
-            out[node.name] = (f"class {node.name}", ast.get_docstring(node) or "")
+            init = next((m for m in node.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"), None)
+            if init is not None:                              # 作り方（引数と説明）も、クラスの説明に添える
+                head = f"class {node.name}({ast.unparse(init.args)})".replace("(self, ", "(").replace("(self)", "()")
+                out[node.name] = (head, "\n".join(x for x in (ast.get_docstring(node), ast.get_docstring(init)) if x))
+            else:
+                out[node.name] = (f"class {node.name}", ast.get_docstring(node) or "")
             for m in node.body:
-                if isinstance(m, ast.FunctionDef) and not any(ast.unparse(d).endswith(".setter") for d in m.decorator_list):
+                if isinstance(m, ast.FunctionDef) and not m.name.startswith("__") \
+                        and not any(ast.unparse(d).endswith(".setter") for d in m.decorator_list):
                     prop = any(ast.unparse(d) == "property" for d in m.decorator_list)
                     head = f"{node.name}.{m.name}: {ast.unparse(m.returns)}" if prop else \
                         f"{node.name}.{m.name}({ast.unparse(m.args)}) -> {ast.unparse(m.returns)}".replace("(self)", "()").replace("(self, ", "(")
@@ -807,6 +921,8 @@ API_SECTIONS = [
     ("並べる・フォーカスを移す", ["layout", "layouts", "tiles", "area", "nav"]),
     ("登録したもの・win の命令を呼ぶ", ["apply_set", "run_command", "run"]),
     ("起動・通知", ["launch", "browse", "term", "notify"]),
+    ("対話型の小窓（1 回で選ぶ）", ["choose", "confirm", "ask", "pick_tile", "pick_window", "window_items", "Item", "Map"]),
+    ("対話型の小窓（やり取りを回す）", ["Dialog", "Dialog.rows", "Dialog.map", "Dialog.notice", "Dialog.keys", "Dialog.text", "Dialog.events", "Event"]),
 ]
 
 

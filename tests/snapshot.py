@@ -123,4 +123,10 @@ for c in ({"type": "win", "run": "layout lr firefox"}, {"type": "shell", "run": 
     show(f"describe_command({c})", lambda c=c: fn("describe_command")(c))
 show("set_summary", lambda: fn("set_summary")({"type": "win", "run": "layout v(1,2,2:h(1,1)) org.gnome.Ptyxis? firefox? slack?"}))
 show("selector_for", lambda: fn("selector_for")({"id": 1, "wm_class": "firefox", "title": "a"}, [{"id": 1, "wm_class": "firefox", "title": "a"}]))
+for k in ("Left", "Right", "Up", "Down"):
+    show(f"move_toward({k})", lambda k=k: fn("move_toward")([(0, 0, .3, 1), (.3, 0, .3, 1), (.6, 0, .4, .5), (.6, .5, .4, .5)], 1, k))
+show("move_toward 端", lambda: fn("move_toward")([(0, 0, 1, 1)], 0, "Left"))
+show("Item", lambda: fn("Item")("a", "b"))
+show("Map", lambda: fn("Map")([(0, 0, 1, 1)], current=0))
+show("api_entries の名前", lambda: sorted(k for k in fn("api_entries")() if k in ("Dialog", "choose", "Dialog.events", "Item", "Map", "Event", "ask", "confirm", "pick_tile", "pick_window", "window_items")))
 shutil.rmtree(TMP, ignore_errors=True)

@@ -1,4 +1,4 @@
-# 対話型の小窓の設計（検討中）
+# 対話型の小窓の設計
 
 ## 1. いまの呼び出し（2026-11-20 時点）
 
@@ -78,3 +78,19 @@ with ui.dialog(title="置き先を選ぶ", hint="←→ で置き先を動かす
 - 4.1 と 4.2 の両方を足すか、4.2 だけにして 4.1 はその上の薄い関数として作るか。
 - 乗せ換えの範囲（`place` だけか、`set`・`pick` も）。
 - イベントの受け取りを、拡張の関数の中で同期的に回す（上の例）か、キーごとにコールバックを登録するか。
+
+## 7. 実装の状況（2026-11-20）
+
+決めたこと: 簡便な関数と `Dialog` の両方を足す／乗せ換えは `place`・`here` だけ／イベントは関数の中で同期的に回す。
+
+できたこと:
+- 描画の部品（`_tilepick`）に、汎用の画面 `show`・`patch` を足した（行・地図・通知・受け取るキー・絞り込み・アプリ起動・入力欄・一覧の有無・題名を、1 つの宣言で渡す）。子→親は `select`（via が enter か tab）・`key`・`text`・`highlight`・`app`/`cmd`・`cancel`。
+- `dialog.py`: `Dialog`（with と `events()`）、`Item`・`Map`・`Event`、`choose`・`confirm`・`ask`・`pick_tile`・`pick_window`・`window_items`。
+- `winapi` に上のものを公開（`winapi.pyi`・`win help api`・LSP の補完にも出る）。
+- `place`・`here` を `Dialog` の上に書き直した（拡張と同じ部品。左右矢印のキー処理は、親の Python に移った）。
+- 実機で、拡張から `choose`（地図つき）・`confirm`・`ask`・`pick_tile`・`Dialog`（キー・Ctrl+S・通知）が動くのを確認した。
+
+まだのこと:
+- 5 の一部: 描画の部品の旧メッセージ（`layouts`・`tile`）は残っている（`win layout` の 2 段階がこれを使う）。`show` への統一はしていない。
+- `set`（`_setpick`）と `pick`（`_pick`）・拡張の `pick()`（`pick_interactive`）は、`Dialog` に乗せ換えていない。
+- `choose` の `preview`（選択が動くたびの地図）と、`keep_selection`・`highlight` は、`choose` の経路でしか実機で確かめていない。

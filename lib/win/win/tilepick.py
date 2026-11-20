@@ -232,11 +232,30 @@ def run_tilepick():
         def on_row_selected(self, _lb, row):
             if st["stage"] == "layout" and row is not None and 0 <= row.get_index() < len(st["rows"]):
                 self.draw_map(st["rows"][row.get_index()].get("rects", []), -1, None)
+            elif st["stage"] == "dialog" and row is not None and st["dlg"].get("highlight") and 0 <= row.get_index() < len(st["rows"]):
+                act = st["rows"][row.get_index()]["act"]
+                if act.get("act") == "select":                # 選択が動いたことを親へ知らせる（返信を待たない）
+                    print(json.dumps({"act": "highlight", "index": act["index"]}), flush=True)
 
         def populate(self):
             if st["stage"] == "layout":
                 rows = layout_candidates(self.entry.get_text(), st["layouts"])
                 self.chip.set_text("型")
+            elif st["stage"] == "dialog":                     # 汎用の画面（dialog.Dialog）: 親が渡した行を、入力で絞り込む
+                d, text = st["dlg"], self.entry.get_text()
+                if d.get("launch") and text.startswith("!"):
+                    _mode, rows = tile_candidates(text, [], st["apps"])
+                    self.chip.set_text("アプリを新規起動")
+                else:
+                    q, scored = text.strip(), []
+                    for i, r in enumerate(d.get("rows") or []):
+                        sc = fuzzy(q, f"{r['title']} {r.get('sub', '')}") if q and d.get("filter", True) else 0
+                        if sc is not None:
+                            scored.append((-sc, i, r))
+                    scored.sort(key=lambda t: (t[0], t[1]))
+                    rows = [{"act": {"act": "select", "index": i}, "title": r["title"], "sub": r.get("sub", ""),
+                             **({"icon": r["icon"]} if r.get("icon") else {})} for _, i, r in scored]
+                    self.chip.set_text(d.get("chip") or "選ぶ")
             else:
                 mode, rows = tile_candidates(self.entry.get_text(), st["windows"], st["apps"])
                 self.chip.set_text("アプリを新規起動" if mode == "app" else "開いている窓")
@@ -259,9 +278,11 @@ def run_tilepick():
             if not rows:
                 self.listbox.append(Gtk.ListBoxRow(can_focus=False, selectable=False, child=Gtk.Label(
                     label=("一致する型がありません" if st["stage"] == "layout"
+                           else (st["dlg"].get("empty") or "一致する項目がありません") if st["stage"] == "dialog"
                            else "一致する窓がありません（先頭に ! でアプリを探す）"), margin_top=14, margin_bottom=14)))
             else:
-                self.listbox.select_row(self.listbox.get_row_at_index(0))
+                keep = st.get("keep_selection")
+                self.listbox.select_row(self.listbox.get_row_at_index(min(keep, len(rows) - 1) if keep is not None else 0))
             self.scroller.get_vadjustment().set_value(0)
 
         def move(self, d):
@@ -280,6 +301,15 @@ def run_tilepick():
 
         def choose(self, rest):
             row = self.listbox.get_selected_row()
+            if st["stage"] == "dialog":
+                if row is None or not st["rows"]:
+                    if st["dlg"].get("ask"):                  # 文字を入力する画面: Enter でその文字を返す
+                        self.reply({"act": "text", "text": self.entry.get_text()})
+                    return
+                act = dict(st["rows"][row.get_index()]["act"])
+                act["via"] = "tab" if rest else "enter"        # どのキーで決めたか
+                self.reply(act)
+                return
             if row is None or not st["rows"]:
                 if rest:
                     self.reply({"act": "none", "rest": True})
@@ -330,8 +360,12 @@ def run_tilepick():
                 self.entry.set_placeholder_text(m.get("placeholder") or TILE_PLACEHOLDER)
                 self.hint.set_text(m.get("hint") or TILE_HINT)
                 st["windows"] = m["windows"]
-                st["movable"] = bool(m.get("movable"))        # 左右矢印で、置き先のタイルを動かせる（win place）
                 st["free"] = m.get("free") or []              # 空きスペースのタイル（点線で描く）
+                st["keep_selection"] = None
+                self.map.set_visible(True)
+                self.entry.set_visible(True)
+                self.chip.set_visible(True)
+                self.scroller.set_visible(True)
                 if m.get("mon") is not None:
                     st["mon"] = m["mon"]
                 if "apps" in m:
@@ -343,6 +377,36 @@ def run_tilepick():
                 self.entry.set_text("")
                 self.populate()
                 self.entry.grab_focus_without_selecting()
+            elif c in ("show", "patch"):
+                # 汎用の画面（dialog.Dialog）。show は全体を描き直して入力を待つ。patch は渡した項目だけ更新する（返信を待たない通知への応答）
+                d = st["dlg"] = {**st.get("dlg", {}), **m} if c == "patch" else m
+                st["stage"] = "dialog"
+                self.title_lab.set_text(d.get("title") or "")
+                self.header_lab.set_label(d.get("window_title") or "win")
+                self.hint.set_text(d.get("hint") or "")
+                self.entry.set_placeholder_text(d.get("placeholder") or "")
+                self.entry.set_visible(d.get("entry", True))
+                self.chip.set_visible(d.get("entry", True))
+                self.scroller.set_visible(d.get("list", True))
+                mp = d.get("map")
+                st["free"] = (mp or {}).get("free") or []
+                if mp and mp.get("mon") is not None:
+                    st["mon"] = mp["mon"]
+                self.map.set_visible(bool(mp))
+                if mp:
+                    self.draw_map(mp["rects"], mp.get("index", -1), mp.get("labels"))
+                if "apps" in m:
+                    st["apps"] = m["apps"]
+                self.set_notice(d.get("notice"))
+                if c == "show":
+                    sel = self.listbox.get_selected_row()
+                    st["keep_selection"] = sel.get_index() if (d.get("keep_selection") and sel is not None) else None
+                    st["busy"] = False
+                    self.entry.set_sensitive(True)
+                    if m.get("text") is not None:
+                        self.entry.set_text(m["text"])
+                    self.populate()
+                    self.entry.grab_focus_without_selecting()
             elif c == "busy":
                 st["busy"] = True
                 self.entry.set_sensitive(False)
@@ -400,7 +464,8 @@ def run_tilepick():
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             for wdg in (self.title_lab, self.map, row, self.scroller, self.notice, hint):
                 outer.append(wdg)
-            header = Adw.HeaderBar(title_widget=Gtk.Label(label="窓を並べる"), show_end_title_buttons=False)
+            self.header_lab = Gtk.Label(label="窓を並べる")
+            header = Adw.HeaderBar(title_widget=self.header_lab, show_end_title_buttons=False)
             view = Adw.ToolbarView(content=outer)
             view.add_top_bar(header)
             win = Adw.ApplicationWindow(application=self, title="win-tilepick", default_width=720, content=view)
@@ -408,8 +473,12 @@ def run_tilepick():
             def on_key(_c, keyval, _kc, state_mask):
                 name = Gdk.keyval_name(keyval)
                 ctrl = bool(state_mask & Gdk.ModifierType.CONTROL_MASK)
+                combo = ("Ctrl+" if ctrl else "") + (name or "")
                 if name == "Escape":
                     self.reply({"act": "cancel"})
+                elif st["stage"] == "dialog" and combo in (st["dlg"].get("keys") or []) \
+                        and not (state_mask & (Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK)):
+                    self.reply({"act": "key", "key": combo})   # 親が受け取りたいと言ったキーは、親へ渡す
                 elif name == "Down" or (ctrl and name in ("n", "j")):
                     self.move(1)
                 elif name == "Up" or (ctrl and name in ("p", "k")):
@@ -417,9 +486,6 @@ def run_tilepick():
                 elif name in ("Left", "Right") and st["stage"] == "layout" and self.multi_mon() \
                         and not (state_mask & ~Gdk.ModifierType.LOCK_MASK):
                     self.move_mon(1 if name == "Right" else -1)
-                elif name in ("Left", "Right") and st["stage"] == "tile" and st.get("movable") \
-                        and not (state_mask & ~Gdk.ModifierType.LOCK_MASK):
-                    self.reply({"act": "target", "dir": 1 if name == "Right" else -1})
                 elif name in ("Return", "KP_Enter"):
                     self.choose(False)
                 elif name in ("Tab", "ISO_Left_Tab"):
