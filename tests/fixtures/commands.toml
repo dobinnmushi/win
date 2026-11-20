@@ -1,0 +1,6 @@
+# win config が書き換えます。手で編集してもかまいません（コメントは、保存し直すと消えます）。
+
+[commands]
+[commands.close-focused-window]
+type = "win"
+run = "close"

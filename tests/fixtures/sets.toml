@@ -1,0 +1,6 @@
+# win config が書き換えます。手で編集してもかまいません（コメントは、保存し直すと消えます）。
+
+[sets]
+[sets.test]
+type = "win"
+run = "layout v(1,2,2:h(1,1)) org.gnome.Ptyxis? firefox? slack? thunderbird_thunderbird?"

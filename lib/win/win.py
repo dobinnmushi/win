@@ -327,14 +327,25 @@ def logical_rect(lm, monitors):
     return x, y, round(w / scale), round(h / scale)
 
 
-_MONITOR = {"rect": None, "primary": True}     # この実行で基準にするモニタの領域と、それが主モニタか（最初に 1 回だけ決める）
+class Screen:
+    """基準にするモニタ（論理領域と、主モニタか）。作り直さない限り変わらない。作業領域はここから求める。"""
+    __slots__ = ("rect", "primary", "name")
+
+    def __init__(self, rect, primary, name=None):
+        self.rect, self.primary, self.name = tuple(rect), bool(primary), name
+
+    def work_area(self, cfg):
+        """タイルを置ける領域（上下左右の余白を除く）。上部バーは主モニタにしか出ないので、その高さの余白は主モニタだけに適用する。"""
+        x, y, w, h = self.rect
+        i = dict(cfg["insets"])
+        if not self.primary:
+            i["top"] = 0
+        return x + i["left"], y + i["top"], w - i["left"] - i["right"], h - i["top"] - i["bottom"]
 
 
-def resolve_monitor(choice=None):
-    """基準にするモニタを決めて保持する。choice: None・"current"＝いまの窓があるモニタ、"primary"＝主モニタ、
-    接続名（例 eDP-1）。choice を省いたときは、すでに決めていればそれを使う（小窓が開いてフォーカスが動いても変えない）。"""
-    if choice is None and _MONITOR["rect"] is not None:
-        return _MONITOR["rect"]
+def find_screen(choice=None):
+    """基準にするモニタ（Screen）を探す。状態は変えない。choice: None・"current"＝いまの窓があるモニタ、"primary"＝主モニタ、
+    接続名（例 eDP-1）。"""
     monitors, logical = display_state()
     rects = [(lm, logical_rect(lm, monitors)) for lm in logical]
     primary = next(((lm, r) for lm, r in rects if lm[4]), rects[0])
@@ -362,13 +373,34 @@ def resolve_monitor(choice=None):
         chosen = next(((lm, r) for lm, r in rects if choice in [c[0] for c in lm[5]]), None)
         if chosen is None:
             raise WinError(f"モニタが見つかりません: {choice}（使えるのは primary, current, {', '.join(names)}）")
-    _MONITOR["rect"], _MONITOR["primary"] = chosen[1], bool(chosen[0][4])
-    return chosen[1]
+    return Screen(chosen[1], chosen[0][4], chosen[0][5][0][0])
+
+
+_DEFAULT_SCREEN = [None]     # この実行の既定の基準モニタ（コマンド行の -m。最初に 1 回だけ決める）。小窓の中での切り替えは、これを書き換えず Screen を渡す
+
+
+def use_screen(screen):
+    """この実行の既定の基準モニタを、screen にする（コマンド行の -m と同じ働き。セットを別のモニタで実行するときなど）。"""
+    _DEFAULT_SCREEN[0] = screen
+    return screen
+
+
+def default_screen():
+    """この実行の既定の基準モニタ。まだ決めていなければ、いまの窓があるモニタに決める。"""
+    return _DEFAULT_SCREEN[0] or use_screen(find_screen())
+
+
+def resolve_monitor(choice=None):
+    """既定の基準モニタを決めて保持し、その論理領域を返す。choice を省いたときは、すでに決めていればそれを使う
+    （小窓が開いてフォーカスが動いても変えない）。"""
+    if choice is None and _DEFAULT_SCREEN[0] is not None:
+        return _DEFAULT_SCREEN[0].rect
+    return use_screen(find_screen(choice)).rect
 
 
 def monitor_rect():
-    """基準のモニタの論理領域 (x, y, w, h)。拡大率と回転を反映する。"""
-    return _MONITOR["rect"] or resolve_monitor()
+    """既定の基準のモニタの論理領域 (x, y, w, h)。拡大率と回転を反映する。"""
+    return default_screen().rect
 
 
 def load_config():
@@ -382,12 +414,9 @@ def load_config():
     return cfg
 
 
-def work_area(cfg):
-    x, y, w, h = monitor_rect()
-    i = dict(cfg["insets"])
-    if not _MONITOR["primary"]:
-        i["top"] = 0                                   # 上部バーは主モニタにしか出ないので、その高さの余白は主モニタだけに適用する
-    return x + i["left"], y + i["top"], w - i["left"] - i["right"], h - i["top"] - i["bottom"]
+def work_area(cfg, screen=None):
+    """screen（省くと既定の基準モニタ）の作業領域 (x, y, w, h)。"""
+    return (screen or default_screen()).work_area(cfg)
 
 
 # ---------------------------------------------------------------- 型
@@ -734,7 +763,8 @@ def cmd_layout(args):
     wc = WindowCalls()
     cfg = load_config()
     gap = cfg["gap"] if args.gap is None else args.gap
-    area = work_area(cfg)
+    screen = find_screen(args.monitor) if getattr(args, "monitor", None) else default_screen()
+    area = screen.work_area(cfg)
     if args.layout is None:
         return gui_layout_flow(wc, args, cfg, area, gap)
     expr = resolve_layout(cfg, args.layout)
@@ -1187,16 +1217,16 @@ TILE_PLACEHOLDER = "文字で絞り込み　先頭に ! でアプリを探して
 TILE_HINT = "↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 ・ Ctrl+S 空ける ・ Ctrl+B 戻る ・ Esc 終了"
 
 
-def screen_info():
+def screen_info(screen=None):
     """ミニ地図に描く、全モニタ {"monitors": [{"name", "rect", "work"}…], "current": 基準モニタの添字}。取れなければ None。"""
-    mons, cur = monitors_for_preview(load_config())
+    mons, cur = monitors_for_preview(load_config(), screen)
     return {"monitors": mons, "current": cur} if mons else None
 
 
-def spawn_tilepick():
+def spawn_tilepick(screen=None):
     """絞り込みの小窓（_tilepick）を起動する。画面の位置は環境変数で渡す（ミニ地図に全モニタを薄く描くため）。"""
     env = dict(os.environ)
-    info = screen_info()
+    info = screen_info(screen)
     if info:
         env["WIN_SCREEN"] = json.dumps(info)
     return subprocess.Popen([sys.executable, WIN_BIN, "_tilepick"], stdin=subprocess.PIPE,
@@ -1570,10 +1600,10 @@ def pick_interactive(wc, title="窓を選ぶ", rects=None, index=0, labels=None,
             child.kill()
 
 
-def slot_map(wc, n=None):
+def slot_map(wc, n=None, screen=None):
     """いまの並び（逆算）の、小窓の地図用のタイル（0〜1 の割合）と、各タイルの窓のクラス名。"""
     cfg = load_config()
-    cur = current_tiles(wc, cfg)
+    cur = current_tiles(wc, cfg, screen)
     if cur["tree"] is None:
         return None, None
     order = tile_order(cur, cfg)[1]
@@ -1622,10 +1652,9 @@ def gui_layout_flow(wc, args, cfg, area, gap):
             if res.get("act") != "layout":
                 return 0
             expr = resolve_layout(cfg, res["name"])
-            if res.get("monitor"):                       # 小窓で選んだモニタを基準にして並べる
-                resolve_monitor(res["monitor"])
+            if res.get("monitor"):                       # 小窓で選んだモニタを基準にして並べる（全体の既定は変えず、args で持ち回る）
                 args.monitor = res["monitor"]
-                area = work_area(cfg)
+                area = find_screen(args.monitor).work_area(cfg)
             try:
                 rects = compute_rects(expr, area, gap)
             except WinError as e:
@@ -3474,11 +3503,12 @@ def _match_named(items, layouts, tol):
     return None
 
 
-def current_tiles(wc, cfg):
-    """いま基準のモニタに出ている窓の並びを、窓の位置から逆算する（win save と @slot が使う）。
+def current_tiles(wc, cfg, screen=None):
+    """いま基準のモニタ（screen。省くと既定）に出ている窓の並びを、窓の位置から逆算する（win save と @slot が使う）。
     {"onmon", "other", "maxed", "items", "tree", "dropped", "by_id"}。tree は最大化していない窓だけで作る（なければ None）。"""
-    ax, ay, aw, ah = work_area(cfg)
-    mx, my, mw, mh = monitor_rect()
+    screen = screen or default_screen()
+    ax, ay, aw, ah = screen.work_area(cfg)
+    mx, my, mw, mh = screen.rect
     by_id = {w["id"]: w for w in normal_windows(wc)}
     onmon, other = [], 0
     for z, (w, (x, y, rw, rh)) in enumerate(visible_windows(wc)):         # 下 → 上
@@ -3695,23 +3725,19 @@ def set_preview(c, cfg):
     return tiles
 
 
-def monitors_for_preview(cfg):
-    """プレビューに描く各モニタ {"name", "rect", "work"} と、基準モニタの添字。取れなければ ([], 0)。"""
+def monitors_for_preview(cfg, screen=None):
+    """プレビューに描く各モニタ {"name", "rect", "work"} と、基準モニタ（screen。省くと既定）の添字。取れなければ ([], 0)。"""
     try:
         monitors, logical = display_state()
     except WinError:
         return [], 0
-    base = tuple(monitor_rect())
+    base = (screen or default_screen()).rect
     out, cur = [], 0
     for lm in logical:
-        x, y, w, h = rect = logical_rect(lm, monitors)
-        i = dict(cfg["insets"])
-        if not lm[4]:
-            i["top"] = 0                                   # work_area と同じ。上部バーの余白は主モニタだけ
+        rect = logical_rect(lm, monitors)
         if rect == base:
             cur = len(out)
-        out.append({"name": lm[5][0][0], "rect": list(rect),
-                    "work": [x + i["left"], y + i["top"], w - i["left"] - i["right"], h - i["top"] - i["bottom"]]})
+        out.append({"name": lm[5][0][0], "rect": list(rect), "work": list(Screen(rect, lm[4]).work_area(cfg))})
     return out, cur
 
 
@@ -3923,7 +3949,7 @@ def cmd_set(args):
         if name is None:
             return 1
         if monitor:
-            resolve_monitor(monitor)                      # 小窓で選んだモニタを基準にして適用する（行に -m があればそちらが優先）
+            use_screen(find_screen(monitor))              # 小窓で選んだモニタを基準にして適用する（行に -m があればそちらが優先）
     elif name not in sets:
         if name in load_commands():
             raise WinError(f"「{name}」はセットではありません（win run {shlex.quote(name)} で実行できます）")
@@ -5112,11 +5138,12 @@ FREE_MIN_RATIO = 0.05      # 空きスペースとして数える最小の広さ
 FREE_MAX = 6               # 置き先の候補にする空きの数（広い順）
 
 
-def free_rects(wc, exclude=()):
+def free_rects(wc, exclude=(), screen=None):
     """基準モニタの作業領域のうち、窓に覆われていない空きスペース（極大の長方形）を、広い順に [(x, y, 幅, 高さ)]。
     最小化されていない窓の枠で作業領域を区切り、その区切りの上で、窓のない長方形のうち、どの向きにも広げられないものを探す。"""
-    ax, ay, aw, ah = work_area(load_config())
-    mx, my, mw, mh = monitor_rect()
+    screen = screen or default_screen()
+    ax, ay, aw, ah = screen.work_area(load_config())
+    mx, my, mw, mh = screen.rect
     obst = []
     for w, (x, y, rw, rh) in visible_windows(wc):
         if w["id"] in exclude or not (mx <= x + rw / 2 < mx + mw and my <= y + rh / 2 < my + mh):
@@ -5154,13 +5181,14 @@ def free_rects(wc, exclude=()):
     return out[:FREE_MAX]
 
 
-def place_targets(wc, front, add_front, exclude=()):
+def place_targets(wc, front, add_front, exclude=(), screen=None):
     """置き先の候補（いまの基準モニタ上）: 並びのタイル（番号順）、前面の窓の場所（並びの外のとき）、空きスペース（広い順）。
     [{"id", "norm"（作業領域に対する割合の x, y, 幅, 高さ）, "label", "c"（画面での中心）, "free", "abs"（空きの枠）}] と、前面の窓のタイルの添字
     （なければ None）。タイルも空きもないときは、作業領域全体を「空き」の 1 枚として返す。"""
     cfg = load_config()
-    ax, ay, aw, ah = work_area(cfg)
-    cur = current_tiles(wc, cfg)
+    screen = screen or default_screen()
+    ax, ay, aw, ah = screen.work_area(cfg)
+    cur = current_tiles(wc, cfg, screen)
     targets = []
     if cur["tree"] is not None:
         box = {it[0]: it[1:5] for it in cur["items"]}
@@ -5174,7 +5202,7 @@ def place_targets(wc, front, add_front, exclude=()):
         targets.append({"id": front["id"], "norm": (bx, by, min(1.0 - bx, d["width"] / aw), min(1.0 - by, d["height"] / ah)),
                         "label": "ここ"})
         index = len(targets) - 1
-    for x, y, w, h in free_rects(wc, exclude):
+    for x, y, w, h in free_rects(wc, exclude, screen):
         targets.append({"id": None, "free": True, "abs": (x, y, w, h), "norm": ((x - ax) / aw, (y - ay) / ah, w / aw, h / ah),
                         "label": "空き"})
     if not targets:
@@ -5185,26 +5213,27 @@ def place_targets(wc, front, add_front, exclude=()):
     return targets, index
 
 
-def place_move(wc, front, targets, index, d):
+def place_move(wc, front, screen, targets, index, d):
     """置き先を、左（d=-1）・右（d=1）の隣の候補へ（実際の位置で決める）。端を越えるときは、その向きの隣のモニタへ
-    （基準のモニタを切り替えて、並びを逆算し直す）。動けなければ None。戻り値: (新しい候補, 新しい添字)。"""
+    （そのモニタの Screen で、並びを逆算し直す。全体の既定は書き換えない）。動けなければ None。
+    戻り値: (新しい Screen, 新しい候補, 新しい添字)。"""
     cx, cy = targets[index]["c"]
     side = [(abs(t["c"][0] - cx) + abs(t["c"][1] - cy), n) for n, t in enumerate(targets)
             if n != index and (t["c"][0] - cx) * d > 0]
     if side:
-        return targets, min(side)[1]
-    mons, cur = monitors_for_preview(load_config())
+        return screen, targets, min(side)[1]
+    mons, cur = monitors_for_preview(load_config(), screen)
     mx, my, mw, mh = mons[cur]["rect"]
     nxt = [(abs(m["rect"][0] + m["rect"][2] / 2 - (mx + mw / 2)) + abs(m["rect"][1] + m["rect"][3] / 2 - (my + mh / 2)) / 4, n)
            for n, m in enumerate(mons) if n != cur and (m["rect"][0] + m["rect"][2] / 2 - (mx + mw / 2)) * d > 0]
     if not nxt:
         return None
-    resolve_monitor(mons[min(nxt)[1]]["name"])
-    ax, ay, aw, ah = work_area(load_config())
-    new, _ = place_targets(wc, front, False)
+    screen = find_screen(mons[min(nxt)[1]]["name"])
+    ax, ay, aw, ah = screen.work_area(load_config())
+    new, _ = place_targets(wc, front, False, screen=screen)
     # 入ってくる側の端に近く、いまの高さに近い候補へ
     key = lambda t: ((t["c"][0] - ax) if d > 0 else (ax + aw - t["c"][0])) + abs(t["c"][1] - cy) / 2
-    return new, min(range(len(new)), key=lambda n: key(new[n]))
+    return screen, new, min(range(len(new)), key=lambda n: key(new[n]))
 
 
 def place_initial(targets, index, n):
@@ -5249,7 +5278,8 @@ def cmd_place(args):
             n = int(n)
         except ValueError:
             raise WinError(f"置き先は、タイルの番号（0 は前面の窓）か free です: {args.n}")
-    targets, fidx = place_targets(wc, front, True)
+    screen = default_screen()
+    targets, fidx = place_targets(wc, front, True, screen=screen)
     index = place_initial(targets, fidx, n)
     if args.window:
         tid = targets[index]["id"]
@@ -5262,13 +5292,13 @@ def cmd_place(args):
                 raise WinError(f"窓が見つかりません: {args.window}")
             w = found[0]
         if n == "free":                       # 置く窓がもともと空きに重なっていたら、その分を除いて空きを取り直す
-            targets, _ = place_targets(wc, front, True, exclude=(w["id"],))
+            targets, _ = place_targets(wc, front, True, exclude=(w["id"],), screen=screen)
             index = place_initial(targets, fidx, "free")
         notice = place_apply(wc, front, targets, index, w, args.min)
         if notice:
             print(notice, file=sys.stderr)
         return 0
-    return gui_place(wc, front, targets, index, args.min)
+    return gui_place(wc, front, screen, targets, index, args.min)
 
 
 def cmd_here(args):
@@ -5277,7 +5307,7 @@ def cmd_here(args):
     return cmd_place(args)
 
 
-def gui_place(wc, front, targets, index, minimize=False):
+def gui_place(wc, front, screen, targets, index, minimize=False):
     """絞り込みの小窓で窓（先頭 ! でアプリ）を選び、置き先と同じ形にして前面に出す。左右矢印で置き先を隣の候補
     （端を越えたら隣のモニタ）へ動かせる。"""
     cfg = load_config()
@@ -5292,7 +5322,7 @@ def gui_place(wc, front, targets, index, minimize=False):
         return [w for w in reversed(normal_windows(wc)) if w["id"] != tid]
 
     def tile(notice="", first=False):
-        mons, mon = monitors_for_preview(cfg)
+        mons, mon = monitors_for_preview(cfg, screen)
         t = targets[index]
         title = ("ここに持ってくる" if t["id"] == front["id"] else
                  "空きスペースに持ってくる" if t.get("free") else f"タイル {index + 1}（{t['label']}）に持ってくる")
@@ -5319,9 +5349,9 @@ def gui_place(wc, front, targets, index, minimize=False):
             act = res.get("act")
             try:
                 if act == "target":
-                    moved = place_move(wc, front, targets, index, res.get("dir", 0))
+                    moved = place_move(wc, front, screen, targets, index, res.get("dir", 0))
                     if moved:
-                        targets, index = moved
+                        screen, targets, index = moved
                     send(tile("" if moved else "その向きに置き先はありません"))
                     wc.simple("Activate", wid)
                     continue
