@@ -144,7 +144,7 @@ def is_multi(sel):
 
 def at_windows(wc, sel):
     """@ で始まる指定に当たる窓のリスト（前面に近い順。1 枚の指定なら 0〜1 枚）。知らない指定は WinError。"""
-    from .tilepick import pick_interactive        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    from .pickers import pick_window_map        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
     from .nav import visible_windows        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
     from .appstate import current_tiles, tile_order        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
     key = sel.lower()
@@ -159,7 +159,7 @@ def at_windows(wc, sel):
         return [w for w in reversed(normal_windows(wc))
                 if w.get("in_current_workspace") and (w.get("wm_class") or "").lower() == cls]
     if key == "@pick":
-        w = pick_interactive(wc)
+        w = pick_window_map(wc)
         if w is None:
             raise WinError("@pick: 選ぶのを取り消しました")
         return [w]

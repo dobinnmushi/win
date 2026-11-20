@@ -81,23 +81,17 @@ with ui.dialog(title="置き先を選ぶ", hint="←→ で置き先を動かす
 
 ## 7. 実装の状況（2026-11-20）
 
-決めたこと: 簡便な関数と `Dialog` の両方を足す／乗せ換えは `place`・`here` だけ／イベントは関数の中で同期的に回す。
+すべての小窓（`place`・`here`・`set`・`pick`・`layout`・拡張の `pick()`）を、`Dialog` の上に乗せ換えた。決めたこと: 簡便な関数と `Dialog` の両方／イベントは関数の中で同期的に回す。
 
-できたこと:
-- 描画の部品（`_tilepick`）に、汎用の画面 `show`・`patch` を足した（行・地図・通知・受け取るキー・絞り込み・アプリ起動・入力欄・一覧の有無・題名を、1 つの宣言で渡す）。子→親は `select`（via が enter か tab）・`key`・`text`・`highlight`・`app`/`cmd`・`cancel`。
-- `dialog.py`: `Dialog`（with と `events()`）、`Item`・`Map`・`Event`、`choose`・`confirm`・`ask`・`pick_tile`・`pick_window`・`window_items`。
-- `winapi` に上のものを公開（`winapi.pyi`・`win help api`・LSP の補完にも出る）。
-- `place`・`here` を `Dialog` の上に書き直した（拡張と同じ部品。左右矢印のキー処理は、親の Python に移った）。
-- 実機で、拡張から `choose`（選択が動くたびに地図が変わる）・`confirm`・`ask`・`pick_tile`・`Dialog`（キー・Ctrl+S・通知）が動くのを確認した。`ask` の初期値、`confirm` の Esc（False）、`pick_tile` の矢印移動も通した。
+**描画の部品（`_tilepick`）のプロトコル**
+- 親→子: `show`（全体を描き直して入力を待つ）・`patch`（渡した項目だけ更新。返信を待たない通知への応答）・`busy`・`quit`。旧い `layouts`・`tile` のメッセージと、専用の段階・モニタ切り替え・タイル移動のコードは削除した。
+- 子→親: 返信を待つもの — `select`（`via` が enter か tab）・`key`・`text`・`app`/`cmd`（`!` の起動）・`none`（行がないまま Tab）・`cancel`。待たない通知 — `highlight`（選択が動いた）・`edit`（入力欄の文字が変わった）。
 
-乗せ換えの追加（同日）:
-- `win set`（`_setpick`）→ `pickers.pick_set`。`highlight` で選択のたびに地図を更新し、左右矢印で適用先のモニタを選ぶ。
-- `win pick`（`_pick`）→ `pickers.pick_rows`。入力欄なしの一覧で、j/k・g/G・l・h/q・1〜9 の従来のキーを、`Dialog` の `vim`・`numbers` で再現した。行の見た目は、クラス名が左ではなく右（補足の欄）に出る形に変わった。
-- 古い `_pick`・`_setpick` の小窓（約 250 行）と、`PICK_APP_ID`・`SETPICK_APP_ID` は削除した。
-- 実機で確認: `win pick --id` の j/j/k/Enter・数字キー 3・q、`win set` の左右矢印・↑↓で変わる地図・Enter での適用（eDP-1 の全面）。
+**Dialog の設定**: `filter`・`entry`・`ask`・`show_list`・`launch`・`highlight`・`keys`・`keep_selection`・`empty`・`chip`・`window_title`・`vim`・`numbers`・`watch`。`options()` であとから変えられる（`win layout` は、型の選択からタイルごとの選択へ、同じ小窓で設定を切り替える）。
+- `watch`: 入力が変わるたびに `edit` の出来事が来る。親が `rows()` を渡し直すと、絞り込みを親が行える（型の式を打つ）。
+- `vim`・`numbers`: 入力欄のない一覧のキー（j/k・g/G・l・h/q・1〜9）と行番号（`win pick`）。
+- 行がないまま Tab → `item` が None の `select`（via="tab"）。`!` で起動したとき → `launched`（window と、その起動コマンド `text`）。
 
-まだのこと:
-- 描画の部品の旧メッセージ（`layouts`・`tile`）は残っている（`win layout` の 2 段階がこれを使う）。`show` への統一はしていない。
-- 拡張の `pick()`（`pick_interactive`）は、`Dialog` に乗せ換えていない（`ext.pick` は `slot`・`rect` の地図指定など、旧い引数を持つ）。
-- 端末版の対話（`layout -i -t`）が使う `line_from_picker` は、`pick_rows` に切り替えたが、実機では動かしていない。
-- `keep_selection` は、実機で確かめていない（`highlight`・`preview` は `choose` で確認済み）。
+**確認（実機）**: `place`・`here`（左右・モニタ越え・`!calculator`）、`set`（地図・左右・適用）、`pick --id`（j/k・数字・q）、`layout`（型の選択・式 `1,2`・左右・`lr` → Ctrl+S → `!calculator`・再現コマンド）、`layout lr -i`（Ctrl+S・Ctrl+B）、拡張の `choose`・`confirm`・`ask`・`pick_tile`・`Dialog`・`pick()`。
+
+**未確認**: `layout` の Tab（残りを自動）、端末版の対話の一覧（`line_from_picker`）、`keep_selection`。

@@ -1,6 +1,5 @@
-"""絞り込みで選ぶ小窓（win layout の対話・pick_interactive）。"""
+"""汎用の小窓の描画側（_tilepick）と、その部品（絞り込み・アプリの一覧・起動）、端末での対話（interactive）。"""
 
-import contextlib
 import gi
 import json
 import os
@@ -8,21 +7,19 @@ import re
 import shlex
 import subprocess
 import sys
-import time
 from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import CURRENT_FILE, GioUnix, TILEPICK_APP_ID, TILE_APP_ID, WinError
-from .screen import find_screen, load_config
-from .layouts import compute_rects, is_shorthand_layout, resolve_layout
+from .screen import load_config
 from .shortcuts import WIN_BIN
 from .dbus import find_windows, focused, normal_windows, selector_for, usable_windows
-from .store import icon_for_class, icon_widget
-from .pickwin import ask_line, center_and_focus
-from .placement import apply_one, cmd_layout, describe, launch, place_settled, raise_group
+from .store import icon_widget
+from .pickwin import ask_line
+from .placement import apply_one, describe, launch, raise_group
 from .textui import ascii_map, set_current, start_placeholders, stop_placeholders
 from .sets import monitors_for_preview
-from .prompt import run_with_ascii_input, save_history
+from .prompt import run_with_ascii_input
 from .appstate import current_tiles, tile_order
 
 
@@ -86,23 +83,6 @@ def tile_candidates(text, windows, apps):
                     "icon": w.get("icon", "")} for _, _, w in scored]
 
 
-def layout_candidates(text, items):
-    """型の選択画面の候補。items は [{"name", "expr", "n", "rects"}]。式（v( h( full）を直接打つこともできる。"""
-    q = text.strip()
-    scored = []
-    for k, it in enumerate(items):
-        sc = fuzzy(q, f"{it['name']} {it['expr']}") if q else 0
-        if sc is not None:
-            scored.append((-sc, k, it))
-    scored.sort(key=lambda t: (t[0], t[1]))
-    rows = [{"act": {"act": "layout", "name": it["name"]}, "title": it["name"],
-             "sub": f"{it['expr']}　{it['n']}枚", "icon": None, "rects": it["rects"]} for _, _, it in scored]
-    if re.match(r"(full|[vh]\s*\()", q) or is_shorthand_layout(q):        # 略記（1,2,2 や 1/1 など）も式として使える
-        rows.append({"act": {"act": "layout", "name": q}, "title": f"式として使う: {q}", "sub": "", "icon": None,
-                     "rects": []})
-    return rows
-
-
 def list_apps():
     apps = []
     for a in Gio.AppInfo.get_all():
@@ -128,10 +108,8 @@ def launch_app(wc, app_id, timeout=12):
     return launch(wc, cmdline, timeout), cmdline
 
 
-TILE_PLACEHOLDER = "文字で絞り込み　先頭に ! でアプリを探して新規起動"
 
 
-TILE_HINT = "↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 ・ Ctrl+S 空ける ・ Ctrl+B 戻る ・ Esc 終了"
 
 
 def screen_info(screen=None):
@@ -151,13 +129,15 @@ def spawn_tilepick(screen=None):
 
 
 def run_tilepick():
-    """タイルごとに窓（先頭 ! でアプリ）を絞り込んで選ぶ小窓。親と 1 行 1 JSON でやり取りする。"""
+    """汎用の小窓（dialog.Dialog の描画側）。親と 1 行 1 JSON でやり取りする。
+    親→子: show（全体を描いて入力を待つ）・patch（渡した項目だけ更新）・busy・quit。
+    子→親: select・key・text・app/cmd・none（行がないまま Tab）・cancel は返信を待つ。highlight・edit は返信を待たない通知。"""
     gi.require_version("Gtk", "4.0")
     gi.require_version("Adw", "1")
     from gi.repository import Adw, Gdk, Gtk, Pango
 
     MAP_W, MAP_H = 300, 150
-    scr = None                                    # 全モニタを囲む枠 bbox と各モニタ monitors（name・rect・work。画面の座標）。無ければ従来どおり作業領域だけの地図
+    scr = None                                    # 全モニタを囲む枠 bbox と各モニタ monitors（name・rect・work。画面の座標）。無ければ作業領域だけの地図
     cur_mon = 0
     try:
         info = json.loads(os.environ.get("WIN_SCREEN") or "null")
@@ -171,7 +151,7 @@ def run_tilepick():
             cur_mon = min(max(info.get("current") or 0, 0), len(mons) - 1)
     except (ValueError, KeyError, TypeError):
         scr = None
-    st = {"windows": [], "apps": [], "rows": [], "busy": True, "stage": "tile", "layouts": [], "mon": cur_mon}
+    st = {"apps": [], "rows": [], "busy": True, "mon": cur_mon, "dlg": {}, "free": [], "keep_selection": None, "applying": False}
 
     class App(Adw.Application):
         def __init__(self):
@@ -212,11 +192,11 @@ def run_tilepick():
                 rects = [((wx + x * ww - bx) / bw, (wy + y * wh - by) / bh, w * ww / bw, h * wh / bh)
                          for x, y, w, h in rects]
             for i, (x, y, w, h) in enumerate(rects):
-                label = labels[i] if labels else ""
+                label = labels[i] if labels and i < len(labels) else ""
                 lab = Gtk.Label(label=f"{i + 1}" + (f"\n{label}" if label else ""), ellipsize=Pango.EllipsizeMode.END,
                                 max_width_chars=1, justify=Gtk.Justification.CENTER)
                 lab.add_css_class("tile-box")
-                if st.get("free") and i < len(st["free"]) and st["free"][i]:
+                if st["free"] and i < len(st["free"]) and st["free"][i]:
                     lab.add_css_class("free")
                 if i == cur:
                     lab.add_css_class("cur")
@@ -225,51 +205,38 @@ def run_tilepick():
                 lab.set_size_request(max(8, int(w * MAP_W) - 2), max(8, int(h * MAP_H) - 2))
                 self.map.put(lab, int(x * MAP_W) + 1, int(y * MAP_H) + 1)
 
-        def set_tile(self, m):
-            self.title_lab.set_text(m.get("title") or f"タイル {m['index'] + 1} / {m['n']}　{m['layout']}")
-            self.draw_map(m["rects"], m["index"], m["labels"])
-
         def on_row_selected(self, _lb, row):
-            if st["stage"] == "layout" and row is not None and 0 <= row.get_index() < len(st["rows"]):
-                self.draw_map(st["rows"][row.get_index()].get("rects", []), -1, None)
-            elif st["stage"] == "dialog" and row is not None and st["dlg"].get("highlight") and 0 <= row.get_index() < len(st["rows"]):
+            if row is not None and st["dlg"].get("highlight") and 0 <= row.get_index() < len(st["rows"]):
                 act = st["rows"][row.get_index()]["act"]
                 if act.get("act") == "select":                # 選択が動いたことを親へ知らせる（返信を待たない）
                     print(json.dumps({"act": "highlight", "index": act["index"]}), flush=True)
 
         def populate(self):
-            if st["stage"] == "layout":
-                rows = layout_candidates(self.entry.get_text(), st["layouts"])
-                self.chip.set_text("型")
-            elif st["stage"] == "dialog":                     # 汎用の画面（dialog.Dialog）: 親が渡した行を、入力で絞り込む
-                d, text = st["dlg"], self.entry.get_text()
-                if d.get("launch") and text.startswith("!"):
-                    _mode, rows = tile_candidates(text, [], st["apps"])
-                    self.chip.set_text("アプリを新規起動")
-                else:
-                    q, scored = text.strip(), []
-                    for i, r in enumerate(d.get("rows") or []):
-                        sc = fuzzy(q, f"{r['title']} {r.get('sub', '')}") if q and d.get("filter", True) else 0
-                        if sc is not None:
-                            scored.append((-sc, i, r))
-                    scored.sort(key=lambda t: (t[0], t[1]))
-                    rows = [{"act": {"act": "select", "index": i}, "title": r["title"], "sub": r.get("sub", ""),
-                             **({"icon": r["icon"]} if r.get("icon") else {}),
-                             **({"num": k + 1} if d.get("numbers") and k < 9 else {})} for k, (_, i, r) in enumerate(scored)]
-                    self.chip.set_text(d.get("chip") or "選ぶ")
+            d, text = st["dlg"], self.entry.get_text()
+            if d.get("launch") and text.startswith("!"):
+                _mode, rows = tile_candidates(text, [], st["apps"])
+                self.chip.set_text("アプリを新規起動")
             else:
-                mode, rows = tile_candidates(self.entry.get_text(), st["windows"], st["apps"])
-                self.chip.set_text("アプリを新規起動" if mode == "app" else "開いている窓")
+                q, scored = text.strip(), []
+                for i, r in enumerate(d.get("rows") or []):
+                    sc = fuzzy(q, f"{r['title']} {r.get('sub', '')}") if q and d.get("filter", True) else 0
+                    if sc is not None:
+                        scored.append((-sc, i, r))
+                scored.sort(key=lambda t: (t[0], t[1]))
+                rows = [{"act": {"act": "select", "index": i}, "title": r["title"], "sub": r.get("sub", ""),
+                         **({"icon": r["icon"]} if r.get("icon") else {}),
+                         **({"num": k + 1} if d.get("numbers") and k < 9 else {})} for k, (_, i, r) in enumerate(scored)]
+                self.chip.set_text(d.get("chip") or "選ぶ")
             st["rows"] = rows
             while (r := self.listbox.get_row_at_index(0)) is not None:
                 self.listbox.remove(r)
             for r in rows:
                 box = Gtk.Box(spacing=10, margin_top=5, margin_bottom=5, margin_start=10, margin_end=10)
-                if st["stage"] == "dialog" and st["dlg"].get("numbers"):      # 1〜9 の数字キーで直接選べる行の番号
+                if d.get("numbers"):                           # 1〜9 の数字キーで直接選べる行の番号
                     num = Gtk.Label(label=str(r.get("num", "")), width_chars=2, xalign=1)
                     num.add_css_class("dim-label")
                     box.append(num)
-                if "icon" in r:                               # 窓・アプリの行（型の行には出さない）
+                if "icon" in r:
                     box.append(icon_widget(Gtk, Gdk, r["icon"]))
                 title = Gtk.Label(label=r["title"], xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END,
                                   max_width_chars=44)
@@ -282,17 +249,14 @@ def run_tilepick():
                 self.listbox.append(row)
             if not rows:
                 self.listbox.append(Gtk.ListBoxRow(can_focus=False, selectable=False, child=Gtk.Label(
-                    label=("一致する型がありません" if st["stage"] == "layout"
-                           else (st["dlg"].get("empty") or "一致する項目がありません") if st["stage"] == "dialog"
-                           else "一致する窓がありません（先頭に ! でアプリを探す）"), margin_top=14, margin_bottom=14)))
+                    label=d.get("empty") or "一致する項目がありません", margin_top=14, margin_bottom=14)))
             else:
-                keep = st.get("keep_selection")
+                keep = st["keep_selection"]
                 self.listbox.select_row(self.listbox.get_row_at_index(min(keep, len(rows) - 1) if keep is not None else 0))
             self.scroller.get_vadjustment().set_value(0)
 
         def move(self, d):
-            rows = st["rows"]
-            if not rows:
+            if not st["rows"]:
                 return
             sel = self.listbox.get_selected_row()
             self.select_index((sel.get_index() if sel else 0) + d)
@@ -312,30 +276,18 @@ def run_tilepick():
 
         def choose(self, rest):
             row = self.listbox.get_selected_row()
-            if st["stage"] == "dialog":
-                if row is None or not st["rows"]:
-                    if st["dlg"].get("ask"):                  # 文字を入力する画面: Enter でその文字を返す
-                        self.reply({"act": "text", "text": self.entry.get_text()})
-                    return
-                act = dict(st["rows"][row.get_index()]["act"])
-                act["via"] = "tab" if rest else "enter"        # どのキーで決めたか
-                self.reply(act)
-                return
             if row is None or not st["rows"]:
-                if rest:
-                    self.reply({"act": "none", "rest": True})
+                if st["dlg"].get("ask"):                      # 文字を入力する画面: Enter でその文字を返す
+                    self.reply({"act": "text", "text": self.entry.get_text()})
+                elif rest:
+                    self.reply({"act": "none", "via": "tab"})  # 行がないまま Tab
                 return
             act = dict(st["rows"][row.get_index()]["act"])
-            if rest:
-                act["rest"] = True
-            if st["stage"] == "layout" and self.multi_mon():
-                act["monitor"] = scr["monitors"][st["mon"]]["name"]       # 並べる先のモニタ
+            act["via"] = "tab" if rest else "enter"            # どのキーで決めたか
             self.reply(act)
 
         def vim_key(self, name):
             """一覧だけの画面（vim: 入力欄なし）のキー: j/k・g/G・l（決定）・h/q（取消）・1〜9（その行を直接）。扱ったら True。"""
-            sel = self.listbox.get_selected_row()
-            cur = sel.get_index() if sel else 0
             if name in ("j", "n"):
                 self.move(1)
             elif name in ("k", "p"):
@@ -355,68 +307,12 @@ def run_tilepick():
                 return False
             return True
 
-        def multi_mon(self):
-            return bool(scr) and len(scr["monitors"]) > 1
-
-        def layout_title(self):
-            return "型を選ぶ" + (f"（並べる先: {scr['monitors'][st['mon']]['name']}）" if self.multi_mon() else "")
-
-        def move_mon(self, d):
-            """いまのモニタから見て、左（d=-1）・右（d=1）にいちばん近いモニタへ（並び順ではなく実際の位置）。なければそのまま。"""
-            def center(m):
-                return m["rect"][0] + m["rect"][2] / 2, m["rect"][1] + m["rect"][3] / 2
-            mons = scr["monitors"]
-            cx, cy = center(mons[st["mon"]])
-            side = [(abs(center(m)[0] - cx) + abs(center(m)[1] - cy) / 4, n) for n, m in enumerate(mons)
-                    if n != st["mon"] and (center(m)[0] - cx) * d > 0]
-            if side:
-                st["mon"] = min(side)[1]
-                self.title_lab.set_text(self.layout_title())
-                self.on_row_selected(None, self.listbox.get_selected_row())
-
         # -- 親からの命令
         def on_message(self, m):
             c = m.get("cmd")
-            if c == "layouts":
-                st["stage"], st["layouts"] = "layout", m["items"]
-                self.title_lab.set_visible(True)
-                self.title_lab.set_text(self.layout_title())
-                self.entry.set_placeholder_text("型の名前で絞り込み（式も打てます: 1,2,2・1/1・v(1,h(1,1)) など）")
-                self.hint.set_text("↑↓ 選択（ミニ地図が変わる）" + (" ・ ←→ 並べる先のモニタ" if self.multi_mon() else "")
-                                   + " ・ Enter 決定してタイルごとに選ぶ ・ Tab 決定して前面の窓で自動配置 ・ Esc 閉じる")
-                self.set_notice(m.get("notice"))
-                st["busy"] = False
-                self.entry.set_sensitive(True)
-                self.entry.set_text("")
-                self.populate()
-                self.entry.grab_focus_without_selecting()
-            elif c == "tile":
-                st["stage"] = "tile"
-                self.title_lab.set_visible(True)
-                self.entry.set_placeholder_text(m.get("placeholder") or TILE_PLACEHOLDER)
-                self.hint.set_text(m.get("hint") or TILE_HINT)
-                st["windows"] = m["windows"]
-                st["free"] = m.get("free") or []              # 空きスペースのタイル（点線で描く）
-                st["keep_selection"] = None
-                self.map.set_visible(True)
-                self.entry.set_visible(True)
-                self.chip.set_visible(True)
-                self.scroller.set_visible(True)
-                if m.get("mon") is not None:
-                    st["mon"] = m["mon"]
-                if "apps" in m:
-                    st["apps"] = m["apps"]
-                self.set_tile(m)
-                self.set_notice(m.get("notice"))
-                st["busy"] = False
-                self.entry.set_sensitive(True)
-                self.entry.set_text("")
-                self.populate()
-                self.entry.grab_focus_without_selecting()
-            elif c in ("show", "patch"):
-                # 汎用の画面（dialog.Dialog）。show は全体を描き直して入力を待つ。patch は渡した項目だけ更新する（返信を待たない通知への応答）
-                d = st["dlg"] = {**st.get("dlg", {}), **m} if c == "patch" else m
-                st["stage"] = "dialog"
+            if c in ("show", "patch"):
+                # show は全体を描き直して入力を待つ。patch は渡した項目だけ更新する（返信を待たない通知への応答）
+                d = st["dlg"] = {**st["dlg"], **m} if c == "patch" else m
                 self.title_lab.set_text(d.get("title") or "")
                 self.title_lab.set_visible(bool(d.get("title")))
                 self.header_lab.set_label(d.get("window_title") or "win")
@@ -441,9 +337,13 @@ def run_tilepick():
                     st["busy"] = False
                     self.entry.set_sensitive(True)
                     if m.get("text") is not None:
+                        st["applying"] = True                  # 親が置き換えた文字は、入力の変化として知らせない
                         self.entry.set_text(m["text"])
+                        st["applying"] = False
                     self.populate()
                     self.entry.grab_focus_without_selecting()
+                elif "rows" in m:
+                    self.populate()
             elif c == "busy":
                 st["busy"] = True
                 self.entry.set_sensitive(False)
@@ -463,6 +363,15 @@ def run_tilepick():
                 self.on_message(json.loads(line))
             stream.read_line_async(GLib.PRIORITY_DEFAULT, None, self.got_line)
 
+        def on_entry_changed(self, _e):
+            d = st["dlg"]
+            if st["busy"] or st["applying"]:
+                return
+            if d.get("watch"):                                # 入力が変わったことを親へ知らせる（返信を待たない）
+                print(json.dumps({"act": "edit", "text": self.entry.get_text()}, ensure_ascii=False), flush=True)
+            if d.get("filter", True) or d.get("launch"):
+                self.populate()
+
         def do_activate(self):
             css = Gtk.CssProvider()
             css.load_from_string(
@@ -481,7 +390,7 @@ def run_tilepick():
             self.map.set_size_request(MAP_W, MAP_H)
             self.chip = Gtk.Label()
             self.chip.add_css_class("mode-chip")
-            self.entry = Gtk.Entry(hexpand=True, placeholder_text=TILE_PLACEHOLDER)
+            self.entry = Gtk.Entry(hexpand=True)
             self.entry.set_sensitive(False)
             row = Gtk.Box(spacing=8, margin_start=12, margin_end=12)
             row.append(self.chip)
@@ -495,13 +404,13 @@ def run_tilepick():
                                                margin_top=8, margin_start=12, margin_end=12)
             self.notice = Gtk.Label(xalign=0, wrap=True, margin_top=6, margin_start=14, margin_end=14, visible=False)
             self.notice.add_css_class("error")
-            hint = self.hint = Gtk.Label(margin_top=8, margin_bottom=10, label=TILE_HINT)
+            hint = self.hint = Gtk.Label(margin_top=8, margin_bottom=10)
             hint.add_css_class("dim-label")
             hint.add_css_class("caption")
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             for wdg in (self.title_lab, self.map, row, self.scroller, self.notice, hint):
                 outer.append(wdg)
-            self.header_lab = Gtk.Label(label="窓を並べる")
+            self.header_lab = Gtk.Label(label="win")
             header = Adw.HeaderBar(title_widget=self.header_lab, show_end_title_buttons=False)
             view = Adw.ToolbarView(content=outer)
             view.add_top_bar(header)
@@ -511,28 +420,21 @@ def run_tilepick():
                 name = Gdk.keyval_name(keyval)
                 ctrl = bool(state_mask & Gdk.ModifierType.CONTROL_MASK)
                 combo = ("Ctrl+" if ctrl else "") + (name or "")
+                d = st["dlg"]
                 if name == "Escape":
                     self.reply({"act": "cancel"})
-                elif st["stage"] == "dialog" and st["dlg"].get("vim") and not ctrl and self.vim_key(name):
+                elif d.get("vim") and not ctrl and self.vim_key(name):
                     pass
-                elif st["stage"] == "dialog" and combo in (st["dlg"].get("keys") or []) \
-                        and not (state_mask & (Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK)):
+                elif combo in (d.get("keys") or []) and not (state_mask & (Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK)):
                     self.reply({"act": "key", "key": combo})   # 親が受け取りたいと言ったキーは、親へ渡す
                 elif name == "Down" or (ctrl and name in ("n", "j")):
                     self.move(1)
                 elif name == "Up" or (ctrl and name in ("p", "k")):
                     self.move(-1)
-                elif name in ("Left", "Right") and st["stage"] == "layout" and self.multi_mon() \
-                        and not (state_mask & ~Gdk.ModifierType.LOCK_MASK):
-                    self.move_mon(1 if name == "Right" else -1)
                 elif name in ("Return", "KP_Enter"):
                     self.choose(False)
                 elif name in ("Tab", "ISO_Left_Tab"):
                     self.choose(True)
-                elif ctrl and name == "s" and st["stage"] == "tile":
-                    self.reply({"act": "skip"})
-                elif ctrl and name == "b" and st["stage"] == "tile":
-                    self.reply({"act": "back"})
                 elif ctrl and name == "u":
                     self.entry.set_text("")
                 else:
@@ -543,7 +445,7 @@ def run_tilepick():
             ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
             ctrl.connect("key-pressed", on_key)
             win.add_controller(ctrl)
-            self.entry.connect("changed", lambda _e: self.populate() if not st["busy"] else None)
+            self.entry.connect("changed", self.on_entry_changed)
             win.connect("close-request", lambda _w: (self.reply({"act": "cancel"}), self.quit(), True)[2])
             win.present()
             unix = (GioUnix.InputStream if GioUnix else Gio.UnixInputStream).new(0, False)
@@ -551,75 +453,6 @@ def run_tilepick():
             stream.read_line_async(GLib.PRIORITY_DEFAULT, None, self.got_line)
 
     run_with_ascii_input(lambda: App().run([]))
-
-
-PICK_HINT = "↑↓ 選択 ・ Enter 決定 ・ 先頭 ! でアプリを探して新しく起動 ・ Esc 取り消す"
-
-
-def pick_interactive(wc, title="窓を選ぶ", rects=None, index=0, labels=None, allow_launch=True, exclude=()):
-    """layout -i と同じ小窓で窓を 1 枚選ぶ（先頭 ! でアプリを起動して、その窓）。選んだ窓、取り消しなら None。
-    rects（作業領域を 0〜1 にした (x, y, 幅, 高さ) のリスト）と index を渡すと、小窓の地図でそのタイルを強調する。"""
-    if rects is None:                                     # 地図には、いまの並び（どこに何があるか）を出す。強調はしない
-        rects, labels = slot_map(wc)
-        index = -1
-    rects = rects or [(0.0, 0.0, 1.0, 1.0)]
-    exclude = set(exclude)
-    child = spawn_tilepick()
-
-    def send(msg):
-        child.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")
-        child.stdin.flush()
-
-    def msg(notice="", first=False):
-        m = {"cmd": "tile", "index": index, "n": len(rects), "layout": "", "rects": rects, "notice": notice,
-             "labels": labels or [""] * len(rects), "title": title,
-             "hint": PICK_HINT if allow_launch else "↑↓ 選択 ・ Enter 決定 ・ Esc 取り消す",
-             "placeholder": TILE_PLACEHOLDER if allow_launch else "文字で絞り込み",
-             "windows": [{"id": w["id"], "cls": w.get("wm_class") or "", "title": (w.get("title") or "")[:90],
-                           "icon": icon_for_class(w.get("wm_class"))}
-                         for w in usable_windows(wc) if w["id"] not in exclude]}
-        if first:
-            m["apps"] = list_apps() if allow_launch else []
-        return m
-
-    wid = None
-    try:
-        send(msg(first=True))
-        wid = center_and_focus(wc, child, TILEPICK_APP_ID)
-        while True:
-            line = child.stdout.readline()
-            try:
-                res = json.loads(line) if line else {"act": "cancel"}
-            except ValueError:
-                res = {"act": "cancel"}
-            act = res.get("act")
-            if act == "cancel":
-                return None
-            try:
-                if act == "win":
-                    w = next((x for x in normal_windows(wc) if x["id"] == res["id"]), None)
-                    if w is None:
-                        raise WinError("その窓はもう閉じられました")
-                    return w
-                if act in ("app", "cmd") and not allow_launch:
-                    raise WinError("ここでは新しく起動できません。開いている窓から選んでください")
-                if act in ("app", "cmd"):
-                    send({"cmd": "busy", "text": "起動しています…"})
-                    return launch_app(wc, res["id"])[0] if act == "app" else launch(wc, res["text"], 12)
-            except WinError as e:
-                send(msg(str(e)))
-            else:
-                send(msg())                               # 空ける・戻る などは、1 枚選ぶときは使わない
-            if wid:
-                with contextlib.suppress(WinError):
-                    wc.simple("Activate", wid)
-    finally:
-        with contextlib.suppress(OSError, ValueError):
-            send({"cmd": "quit"})
-        try:
-            child.wait(3)
-        except subprocess.TimeoutExpired:
-            child.kill()
 
 
 def slot_map(wc, n=None, screen=None):
@@ -633,201 +466,6 @@ def slot_map(wc, n=None, screen=None):
     rects = [(box[i][0], box[i][1], box[i][2] - box[i][0], box[i][3] - box[i][1]) for i in order]
     labels = [(cur["by_id"][i].get("wm_class") or "")[:14] for i in order]
     return rects, labels
-
-
-def gui_layout_flow(wc, args, cfg, area, gap):
-    """型の名前なしで呼ばれたとき: 小窓で型を選び、Enter ならタイルごとの選択へ、Tab なら前面の窓で自動配置。"""
-    if args.windows or args.dry_run:
-        raise WinError("型を省くときは、窓の指定や -n は使えません")
-    ax, ay, aw, ah = area
-    items = []
-    for name, expr in cfg["layouts"].items():
-        r = compute_rects(expr, area, 0)
-        items.append({"name": name, "expr": expr, "n": len(r),
-                      "rects": [((x - ax) / aw, (y - ay) / ah, w / aw, h / ah) for x, y, w, h in r]})
-    child = spawn_tilepick()
-
-    def send(msg):
-        child.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")
-        child.stdin.flush()
-
-    def close_child():
-        try:
-            send({"cmd": "quit"})
-        except (OSError, ValueError):
-            pass
-        try:
-            child.wait(3)
-        except subprocess.TimeoutExpired:
-            child.kill()
-
-    handed_over = False
-    try:
-        send({"cmd": "layouts", "items": items})
-        wid = center_and_focus(wc, child, TILEPICK_APP_ID)
-        while True:
-            line = child.stdout.readline()
-            try:
-                res = json.loads(line) if line else {"act": "cancel"}
-            except ValueError:
-                res = {"act": "cancel"}
-            if res.get("act") != "layout":
-                return 0
-            expr = resolve_layout(cfg, res["name"])
-            if res.get("monitor"):                       # 小窓で選んだモニタを基準にして並べる（全体の既定は変えず、args で持ち回る）
-                args.monitor = res["monitor"]
-                area = find_screen(args.monitor).work_area(cfg)
-            try:
-                rects = compute_rects(expr, area, gap)
-            except WinError as e:
-                send({"cmd": "layouts", "items": items, "notice": str(e)})
-                wc.simple("Activate", wid)
-                continue
-            args.layout = res["name"]
-            if res.get("rest"):
-                close_child()
-                time.sleep(0.3)                      # 小窓が閉じて、元の窓にフォーカスが戻るのを待つ
-                args.interactive, args.windows = False, []
-                return cmd_layout(args)
-            handed_over = True
-            return gui_interactive(wc, args, expr, rects, area, child, [wid])
-    finally:
-        if not handed_over:
-            close_child()
-
-
-def gui_interactive(wc, args, expr, rects, area, child=None, child_wid=None):
-    n = len(rects)
-    ax, ay, aw, ah = area
-    norm = [((x - ax) / aw, (y - ay) / ah, w / aw, h / ah) for x, y, w, h in rects]
-    try:
-        me = focused(wc)["id"]
-    except WinError:
-        me = None
-    assigned = [None] * n                    # (窓, 再現用の指定) か None
-    procs = start_placeholders(wc, rects) if args.preview else []
-    reuse = child is not None                # 型の選択画面から引き継いだ小窓
-    if not reuse:
-        child = spawn_tilepick()
-        child_wid = [None]
-
-    def send(msg):
-        child.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")
-        child.stdin.flush()
-
-    def refocus():
-        if child_wid[0]:
-            try:
-                wc.simple("Activate", child_wid[0])
-            except WinError:
-                pass
-
-    def tile_msg(i, notice="", first=False):
-        taken = {a[0]["id"] for a in assigned if a}
-        msg = {"cmd": "tile", "index": i, "n": n, "layout": args.layout, "rects": norm, "notice": notice,
-               "labels": [(a[0].get("wm_class") or "")[:14] if a else "" for a in assigned],
-               "windows": [{"id": w["id"], "cls": w.get("wm_class") or "", "title": (w.get("title") or "")[:90],
-                           "icon": icon_for_class(w.get("wm_class"))}
-                           for w in usable_windows(wc) if w["id"] not in taken]}
-        if first:
-            msg["apps"] = list_apps()
-        return msg
-
-    def read_reply():
-        line = child.stdout.readline()
-        if not line:
-            return {"act": "cancel"}
-        try:
-            return json.loads(line)
-        except ValueError:
-            return {"act": "cancel"}
-
-    def place_checked(w, i):
-        got = place_settled(wc, w["id"], rects[i])
-        return (f"タイル {i + 1} の窓は希望の大きさにならず {got[2]}x{got[3]} です（最小サイズなど）" if got else "")
-
-    i, notice, auto_from = 0, "", None
-    try:
-        send(tile_msg(i, first=True))
-        if not reuse:
-            child_wid[0] = center_and_focus(wc, child, TILEPICK_APP_ID)
-        while True:
-            res = read_reply()
-            act, notice = res.get("act"), ""
-            if act == "cancel":
-                break
-            chosen = None
-            try:
-                if act == "win":
-                    w = next((x for x in normal_windows(wc) if x["id"] == res["id"]), None)
-                    if w is None:
-                        raise WinError("その窓はもう閉じられました")
-                    chosen = (w, selector_for(w, normal_windows(wc)))
-                elif act in ("app", "cmd"):
-                    send({"cmd": "busy", "text": "起動しています…"})
-                    if act == "app":
-                        w, cmdline = launch_app(wc, res["id"])
-                    else:
-                        w, cmdline = launch(wc, res["text"], 12), res["text"]
-                    chosen = (w, "!" + cmdline)
-                elif act == "skip":
-                    i += 1
-                elif act == "back":
-                    i = max(0, i - 1)
-                    assigned[i] = None
-            except WinError as e:
-                notice = str(e)
-                send(tile_msg(i, notice))
-                refocus()
-                continue
-            if chosen:
-                notice = place_checked(chosen[0], i)
-                assigned[i] = chosen
-                i += 1
-            if res.get("rest"):
-                auto_from = i
-                taken = {a[0]["id"] for a in assigned if a}
-                others = [w for w in usable_windows(wc) if w["id"] not in taken]
-                for j in range(i, n):
-                    if not others:
-                        break
-                    w = others.pop(0)
-                    place_checked(w, j)
-                    assigned[j] = (w, selector_for(w, normal_windows(wc)))
-                break
-            if i >= n:
-                break
-            send(tile_msg(i, notice))
-            refocus()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        try:
-            send({"cmd": "quit"})
-        except (OSError, ValueError):
-            pass
-        try:
-            child.wait(3)
-        except subprocess.TimeoutExpired:
-            child.kill()
-        stop_placeholders(procs)
-        try:
-            raise_group(wc, [a[0] for a in assigned if a], me)
-        except WinError:
-            pass
-    explicit = assigned[:auto_from] if auto_from is not None else assigned
-    toks = [shlex.quote(a[1]) if a else "-" for a in explicit]
-    while toks and toks[-1] == "-":
-        toks.pop()
-    if auto_from is not None:
-        toks.append("...")
-    if toks:
-        recipe = "layout " + shlex.quote(args.layout) + " " + " ".join(toks)
-        if getattr(args, "monitor", None):
-            recipe += " -m " + shlex.quote(args.monitor)
-        print("同じ配置を再現するコマンド:\n  win " + recipe)
-        save_history(recipe)
-    return 0
 
 
 def interactive(wc, args, expr, rects, area):

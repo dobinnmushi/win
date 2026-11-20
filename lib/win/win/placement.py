@@ -152,7 +152,8 @@ def expand_multi(wc, sels, n):
 
 
 def cmd_layout(args):
-    from .tilepick import gui_interactive, gui_layout_flow, interactive        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    from .layoutflow import gui_interactive, gui_layout_flow        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    from .tilepick import interactive
     wc = WindowCalls()
     cfg = load_config()
     gap = cfg["gap"] if args.gap is None else args.gap

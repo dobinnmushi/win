@@ -42,7 +42,8 @@ class Map:
 @dataclasses.dataclass
 class Event:
     """小窓からの出来事。kind は "select"（行を決めた。via は "enter" か "tab"）・"key"・"text"・"highlight"（選択が動いた）・
-    "launched"（! でアプリを起動した。window がその窓）・"cancel"。"""
+    "launched"（! でアプリを起動した。window がその窓、text がその起動コマンド）・"edit"（入力欄の文字が変わった。watch=True のとき）・
+    "cancel"。行がないまま Tab を押すと、item が None の "select"（via="tab"）になる。"""
     kind: str
     item: Item | None = None
     index: int | None = None
@@ -64,20 +65,33 @@ class Dialog:
 
     def __init__(self, title="", *, hint=HINT, placeholder="文字で絞り込み", filter=True, entry=True, ask=False, show_list=True,
                  launch=False, highlight=False, keys=(), keep_selection=False, empty="", chip="", window_title="win",
-                 vim=False, numbers=False,
+                 vim=False, numbers=False, watch=False,
                  screen=None, wrap=None):
         self.title, self.hint, self.placeholder, self.window_title = title, hint, placeholder, window_title
         self.opts = {"filter": filter, "entry": entry, "ask": ask, "list": show_list, "launch": launch, "highlight": highlight,
-                     "keep_selection": keep_selection, "empty": empty, "chip": chip, "vim": vim, "numbers": numbers}
+                     "keep_selection": keep_selection, "empty": empty, "chip": chip, "vim": vim, "numbers": numbers, "watch": watch}
         self._keys, self._rows, self._map, self._notice, self._text = list(keys), [], None, "", None
         self._screen, self._wrap = screen, wrap or (lambda w: w)
         self._child = self._wc = self._wid = None
-        self._first = True
+        self._apps_sent = False
+        self._rows_dirty = True
 
     # -- 渡す内容
     def rows(self, items):
         """一覧の行を差し替える。"""
         self._rows = list(items)
+        self._rows_dirty = True
+
+    def options(self, **kw):
+        """画面の設定（filter・entry・ask・show_list・launch・highlight・keep_selection・empty・chip・window_title・vim・numbers・watch・
+        title・hint・placeholder）を、あとから変える。"""
+        for k, v in kw.items():
+            if k in ("title", "hint", "placeholder", "window_title"):
+                setattr(self, k, v)
+            elif k in self.opts:
+                self.opts[k] = v
+            else:
+                raise TypeError(f"知らない設定: {k}")
 
     def map(self, m):
         """ミニ地図を差し替える（None で隠す）。"""
@@ -117,12 +131,14 @@ class Dialog:
     def _state(self, kind):
         m = {"cmd": kind, "title": self.title, "window_title": self.window_title, "hint": self.hint, "placeholder": self.placeholder, "notice": self._notice,
              "keys": self._keys, **self.opts}
-        if kind == "show":
+        if kind == "show" or self._rows_dirty:
             m["rows"] = [{"title": i.label, "sub": i.sub, "icon": i.icon} for i in self._rows]
+            self._rows_dirty = False
+        if kind == "show":
             if self._text is not None:
                 m["text"], self._text = self._text, None
-            if self._first and self.opts["launch"]:
-                m["apps"] = list_apps()
+            if self.opts["launch"] and not self._apps_sent:
+                m["apps"], self._apps_sent = list_apps(), True
         mp = self._map
         m["map"] = None if mp is None else {"rects": mp.rects, "labels": mp.labels or [], "index": mp.current,
                                              "free": mp.free or [], "mon": mp.monitor}
@@ -144,16 +160,17 @@ class Dialog:
     def events(self):
         """小窓を開いて、出来事を 1 つずつ返す。出来事を受け取ったあと、次の出来事を待つ前に、現在の内容を小窓へ渡し直す。"""
         self._send(self._state("show"))
-        self._wid = center_and_focus(self._wc, self._child, TILEPICK_APP_ID)
-        self._first = False
+        if self._wid is None:                                # 2 回目以降の events() では、窓の位置を動かさない
+            self._wid = center_and_focus(self._wc, self._child, TILEPICK_APP_ID)
         while True:
             res = self._read()
             act = res.get("act")
             if act == "cancel":
                 yield Event("cancel")
                 return
-            if act == "highlight":                           # 返信を待たない通知: 地図などの一部だけ更新して続ける
-                yield Event("highlight", item=self._item(res["index"]), index=res["index"])
+            if act in ("highlight", "edit"):                 # 返信を待たない通知: 変わった所だけ更新して続ける
+                yield (Event("highlight", item=self._item(res["index"]), index=res["index"]) if act == "highlight"
+                       else Event("edit", text=res.get("text", "")))
                 self._send(self._state("patch"))
                 continue
             ev = None
@@ -162,12 +179,17 @@ class Dialog:
                     ev = Event("select", item=self._item(res["index"]), index=res["index"], via=res.get("via"))
                 elif act == "key":
                     ev = Event("key", key=res.get("key"))
+                elif act == "none":                                # 行がないまま Tab
+                    ev = Event("select", via=res.get("via"))
                 elif act == "text":
                     ev = Event("text", text=res.get("text", ""))
                 elif act in ("app", "cmd"):
                     self._send({"cmd": "busy", "text": "起動しています…"})
-                    w = launch_app(self._wc, res["id"], 12)[0] if act == "app" else launch(self._wc, res["text"], 12)
-                    ev = Event("launched", window=self._wrap(w))
+                    if act == "app":
+                        w, cmdline = launch_app(self._wc, res["id"], 12)
+                    else:
+                        w, cmdline = launch(self._wc, res["text"], 12), res["text"]
+                    ev = Event("launched", window=self._wrap(w), text=cmdline, via=res.get("via"))
             except WinError as e:
                 self.notice(str(e))
             if ev is not None:
@@ -184,7 +206,7 @@ class Dialog:
 def window_items(wc, exclude=(), wrap=None):
     """今のワークスペースで最小化されていない窓を、一覧の行にする（前面に近い順）。value は窓（wrap を渡せば wrap した値）。"""
     wrap = wrap or (lambda w: w)
-    skip = {w["id"] if isinstance(w, dict) else w.id for w in exclude}
+    skip = {w if isinstance(w, int) else w["id"] if isinstance(w, dict) else w.id for w in exclude}
     return [Item((w.get("title") or w.get("wm_class") or "")[:90], w.get("wm_class") or "", icon_for_class(w.get("wm_class")), wrap(w))
             for w in usable_windows(wc) if w["id"] not in skip]
 

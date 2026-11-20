@@ -24,7 +24,8 @@ from .placement import launch, parse_window_spec, place_settled
 from .sets import run_entry, set_summary
 from .prompt import run_inline
 from .appstate import current_tiles, tile_order
-from .tilepick import pick_interactive, slot_map
+from .tilepick import slot_map
+from .pickers import pick_window_map
 from .dialog import Dialog, Event, Item, Map, ask, choose, confirm, pick_tile, window_items
 from .dialog import pick_window as pick_window_dialog
 
@@ -323,7 +324,7 @@ def api_pick(title="窓を選ぶ", slot=None, launch=True, exclude=(), rect=None
         if rects is None or not 1 <= slot <= len(rects):
             raise WinError(f"タイル {slot} がありません（いまの並びのタイルは {len(rects or [])} 枚）")
         index = slot - 1
-    w = pick_interactive(wc, title, rects, index, labels, allow_launch=launch, exclude={x.id for x in exclude})
+    w = pick_window_map(wc, title, rects, index, labels, allow_launch=launch, exclude={x.id for x in exclude})
     if w is None:
         raise WinError("選ぶのを取り消しました")
     return Window(w)

@@ -1,6 +1,8 @@
 """窓・セットを選ぶ小窓（Dialog の上に作る）。win pick・win set・端末の対話モードの一覧が使う。"""
 
 from .dialog import Dialog, Item, Map
+from .dialog import pick_window as pick_window_dialog
+from .tilepick import slot_map
 from .store import icon_for_class
 from .pickwin import row_title
 from .sets import monitors_for_preview, next_monitor, set_preview, set_summary
@@ -61,3 +63,14 @@ def pick_set(wc, cfg, sets):
             elif ev.kind == "cancel":
                 return None, None
     return None, None
+
+
+def pick_window_map(wc, title="窓を選ぶ", rects=None, index=0, labels=None, allow_launch=True, exclude=()):
+    """窓を 1 枚選ぶ（先頭 ! でアプリを起動して、その窓）。選んだ窓、取り消しなら None。
+    rects（作業領域を 0〜1 にした (x, y, 幅, 高さ) のリスト）と index を渡すと、小窓の地図でそのタイルを強調する。
+    rects を省くと、地図にはいまの並び（どこに何があるか）を出す（強調はしない）。"""
+    if rects is None:
+        rects, labels = slot_map(wc)
+        index = -1
+    m = Map(rects or [(0.0, 0.0, 1.0, 1.0)], labels, index)
+    return pick_window_dialog(title, launch=allow_launch, exclude=tuple(exclude), map=m)

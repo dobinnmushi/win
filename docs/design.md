@@ -1,68 +1,100 @@
-# win の設計メモ
+# win の設計メモ（2026-11-20 時点）
 
-## 「アクション」という考え方
+GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道具。本体は Python のパッケージ（`lib/win/win/`）、起動役は `bin/win`。
 
-win で呼べる名前つきの操作（アクション）は、実装の入れ物が違っても、利用者には同じものとして見える。
+## 1. 全体の構成
+
+```
+bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
+lib/win/win/            本体（23 のモジュール）
+tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・fixtures/
+docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）
+~/.config/win/          利用者の設定: commands.toml・sets.toml・layouts.toml（任意）・ext/（拡張の Python）
+```
+
+`~/.local/bin/win` は `bin/win` へのリンク。子プロセス（小窓）も `WIN_BIN`（この起動役）で起こす。
+
+### モジュール（依存は下から上。下のモジュールは上を読み込まない）
+
+| 層 | モジュール | 役割 |
+|---|---|---|
+| 基礎 | `common` | 定数・標準ライブラリの読み込み・`WinError` |
+|  | `screen` | `Screen`（基準のモニタ）・作業領域・設定（layouts.toml）の読み込み・D-Bus で画面情報 |
+|  | `layouts` | 型の式（full / v(...) / h(...)・略記）の解析とタイルの計算 |
+|  | `shortcuts` | GNOME のカスタムショートカット（dconf）の読み書き・標準の操作の一覧 |
+|  | `dbus` | Window Calls の D-Bus・窓の一覧・窓の指定（`@left`・`@slot:N` など） |
+| 保存・配置 | `store` | commands.toml・sets.toml の読み書き・コマンド書式の検査・アプリの起動コマンド |
+|  | `pickwin` | 窓の一覧の行の表示名・小窓の位置合わせ |
+|  | `placement` | 型による配置（`win layout`） |
+|  | `simple` / `textui` / `nav` | list・focus・move・size・state・close／端末の対話の部品／上下左右のフォーカス移動 |
+| 状態・セット | `sets` | セット（保存した窓の並び）・プレビューの材料・モニタの一覧 |
+|  | `prompt` | コマンド入力の小窓（`win prompt`）と補完 |
+|  | `appstate` | いまの並びの逆算（タイルの順）・Firefox/端末の状態・`win save` |
+| 対話型の小窓 | `tilepick` | 汎用の小窓の描画側（`_tilepick`、GTK）と、絞り込み・アプリ一覧・端末版の対話 |
+|  | `dialog` | `Dialog`（親側の部品）と、1 回で選ぶ関数（`choose` など） |
+|  | `pickers` | 窓・セットを選ぶ小窓（`win pick`・`win set`・拡張の `pick()`） |
+|  | `layoutflow` | `win layout` の対話（型の選択からタイルごとの選択まで） |
+| 拡張・入口 | `ext` | 拡張（`~/.config/win/ext/*.py`）と `winapi` |
+|  | `lsp` / `configwin` | エディタ向けの補完（`win lsp`）／設定の窓（`win config`） |
+|  | `overlay` / `cli` | 置き先に窓を重ねる（`win place`・`win here`）／コマンド行の入口（`main`・`build_parser`） |
+
+- 逆向きの依存（下のモジュールが上のモジュールの関数を使う箇所）は、使う関数の中での遅延インポートにしてある（`# 逆向きの依存` の印つき、約 20 か所）。モジュール直下（定数・クラス本体・デコレータ）の参照は、必ず下向き。
+- `win.名前` で、すべてのモジュールの名前を引ける（`__init__` が集める。試験・古い呼び出し方のため）。
+
+## 2. アクション（名前のついた操作）
+
+利用者から見ると、実装の入れ物が違っても同じ「操作」。
 
 | 種類 | 置き場所 | 例 |
 |---|---|---|
-| 組み込み | `lib/win/win.py` の `add_parser` | `place`・`layout`・`set`・`pick`・`nav` |
+| 組み込み | `cli.build_parser`（各モジュールの `cmd_*`） | `place`・`layout`・`set`・`pick`・`nav` |
 | 拡張 | `~/.config/win/ext/*.py` の `@command` | `swap`・`merge`・`split` |
-| コマンド | `~/.config/win/commands.toml` | 登録した win の命令やシェルコマンド |
-| セット | `~/.config/win/sets.toml` | 保存した窓の並び |
+| コマンド | `commands.toml` | 登録した win の命令・シェルコマンド |
+| セット | `sets.toml` | 保存した窓の並び |
 
-設定の窓のショートカット画面は、**種類ではなく目的別**に並べる（窓を選ぶ・移る／窓を並べる・置く／保存した並び／コマンド／その他）。
-種類は、行の左の小さな印（組み込み・拡張・コマンド・セット）で示す。
-拡張は `@command(group="窓を並べる・置く")` のように、入るグループを選べる（省くと「その他の操作」）。
+- 設定の窓のショートカット画面は、**種類ではなく目的別**（窓を選ぶ・移る／窓を並べる・置く／保存した並び／コマンド／その他）に並べ、種類は行の左の印で示す。拡張は `@command(group="…")` で入るグループを選べる。
+- **組み込みにする**: 小窓・画面・並びの逆算など win の内部部品に直接依存するもの、ほかの操作の土台（`place`・`layout`・`set`・`pick`・`nav`・`focus`）。
+- **拡張にする**: `winapi` の公開関数だけで書ける「組み合わせ」（`swap`・`merge`・`split`）。
+- **別名にする**: 既存の操作の引数を決めただけのものは、独立した実装を持たない（`here` は `place 0`）。
+- 組み込みと同じ名前の拡張は、読み込み時にエラー（組み込みが優先）。
 
-## 組み込みか拡張かの基準
+## 3. 基準のモニタ（Screen）
 
-- **拡張にする**: `winapi` の公開関数（`at`・`slots`・`pick`・`layout` など）だけで書ける「組み合わせ」。例: `swap`・`merge`・`split`。
-- **組み込みにする**: win の内部部品（小窓・画面・並びの逆算）に直接依存するもの、ほかの操作の土台になるもの。例: `place`・`layout`・`set`・`pick`・`nav`・`focus`。
-- **別名にする**: 既存の操作の引数を決めただけのものは、独立した実装を持たない。`here` は `place 0` の別名。
-- 組み込みと同じ名前の拡張は、読み込み時にエラーになる（組み込みが優先）。
-
-## 置き先（place）
-
-`win place [N|free] [窓] [--min]`。置き先は次のいずれか。
-- N（1 以上）: いまの並びの N 番目のタイル。
-- 0: 前面の窓のタイル（並びの外にあれば、その窓の場所）。
-- free: いちばん広い空きスペース。
-
-空きスペースは、基準モニタの作業領域から、最小化されていない窓の枠を引いた残りの極大長方形（広さ 5% 以上・各辺 10% 以上）を、広い順に最大 6 つ。
-小窓では、左右矢印で置き先を動かせる。端を越えると隣のモニタへ移る（基準のモニタを切り替えて、並びを逆算し直す）。
-
-## 基準のモニタ（Screen）
-
-基準のモニタは不変の `Screen`（論理領域・主モニタか・接続名）で表す。作業領域は `screen.work_area(cfg)`。
-- 探す: `find_screen(choice)`（状態を変えない）。
-- 既定: コマンド行の `-m` に当たる、この実行の既定の `Screen` が 1 つ（`default_screen()` / `use_screen()`）。`resolve_monitor` は起動時に 1 回これを決める。
-- 小窓の中でモニタを切り替えるときは、既定を書き換えず、新しい `Screen` を作って関数に渡す（`place_move` は新しい `Screen` を返す。`gui_layout_flow` は `args.monitor` で持ち回る）。
+不変の `Screen`（論理領域・主モニタか・接続名）。作業領域は `screen.work_area(cfg)`。
+- `find_screen(choice)` は状態を変えない。既定の `Screen` はこの実行に 1 つ（コマンド行の `-m`。`default_screen()` / `use_screen()`、起動時に `resolve_monitor` が決める）。
+- 小窓の中でモニタを切り替えるときは、既定を書き換えず、新しい `Screen` を作って関数に渡す（`place_move` は新しい `Screen` を返す。`win layout` の型の選択は `args.monitor` で持ち回る）。
 - `current_tiles`・`slot_map`・`free_rects`・`place_targets`・`monitors_for_preview` は、`screen` を省くと既定を使う。
 
-## パッケージの構成（lib/win/win/）
+## 4. 置き先（place）
 
-`~/.local/bin/win` は `bin/win`（起動役）へのリンクで、起動役は自分の実体の位置から `lib/win/` を見つけて `import win` する。
-本体は 22 のモジュール。依存は下から上へ向かい、下のモジュールは上のモジュールを読み込まない。
+`win place [N|free] [窓] [--min]`。置き先は、N（1 以上）＝いまの並びの N 番目のタイル、0＝前面の窓のタイル（並びの外ならその窓の場所）、free＝いちばん広い空きスペース。
+- 空きスペース: 基準モニタの作業領域から、最小化されていない窓の枠を引いた残りの極大長方形（広さ 5% 以上・各辺 10% 以上）を、広い順に最大 6 つ（`free_rects`）。
+- 小窓では、左右矢印で置き先を動かせる。端を越えると隣のモニタへ移る。
 
-| 層（下 → 上） | モジュール |
-|---|---|
-| 基礎 | `common`（定数・標準ライブラリ）、`screen`（Screen・作業領域・設定の読み込み）、`layouts`（型の式・タイルの計算）、`shortcuts`（GNOME のカスタムショートカット）、`dbus`（Window Calls・窓の指定） |
-| 保存・配置 | `store`（commands.toml・sets.toml）、`pickwin`（窓の一覧の小窓）、`placement`（win layout）、`simple`（list・focus・move・size・state・close）、`textui`、`nav` |
-| 状態・セット | `sets`、`prompt`（コマンド入力の小窓・補完）、`appstate`（いまの並びの逆算・Firefox/端末の状態） |
-| 小窓・拡張 | `tilepick`（絞り込みの小窓）、`dialog`（Dialog と 1 回で選ぶ関数）、`pickers`（窓・セットを選ぶ小窓。Dialog の上）、`ext`（拡張と winapi）、`lsp` |
-| 画面・入口 | `configwin`（設定の窓）、`overlay`（place・here）、`cli`（main・build_parser） |
+## 5. 対話型の小窓
 
-- 逆向きの依存（下のモジュールが上のモジュールの関数を使う 18 か所）は、使う関数の中での遅延インポートにしてある（`# 逆向きの依存` の印つき）。モジュール直下（定数・クラス本体・デコレータ）の参照は、必ず下向き。
-- 遅延インポートの一覧: `find_screen`→`dbus`、`at_window(s)`→`nav`・`appstate`・`tilepick`、`cmd_layout`→`tilepick`、`run_entry`・`run_inline`→`cli`、`run_arrangement`→`overlay`、`builtin_commands`→`cli` など。減らすには、これらの関数が使う部品（窓の可視判定・タイル逆算・小窓の起動）を、下の層へ移すか、関数を引数で受け取る形にする。
-- `win.名前` で、すべてのモジュールの名前を引ける（`__init__` が集める。試験・古い呼び出し方のため）。
+すべての小窓は、**描画だけの汎用の子プロセス**（`_tilepick`）と、**状態を持つ親の `Dialog`** の組。詳細は `docs/interactive-design.md`。
 
-## 試験
+| 小窓 | 親の関数 | モジュール |
+|---|---|---|
+| `win place`・`win here` | `gui_place` | `overlay` |
+| `win set` | `pick_set` | `pickers` |
+| `win pick`・端末版の窓一覧 | `pick_rows` | `pickers` |
+| 拡張の `pick()`・`@pick` の窓の指定 | `pick_window_map` | `pickers` |
+| `win layout` | `gui_layout_flow`・`gui_interactive` | `layoutflow` |
+| 拡張から | `Dialog`・`choose`・`confirm`・`ask`・`pick_tile`・`pick_window` | `dialog`（`winapi`） |
+
+例外: コマンド入力（`win prompt` の `_prompt`・`_nvprompt`）・設定の窓（`win config`、同じプロセス）・番号の目印の窓（`_tile`）は、別の作り。
+
+## 6. 試験
 
 - `python3 tests/snapshot.py > before.txt`（変更前）→ `after.txt`（変更後）→ `diff`。ヘルプ・型の一覧・LSP の応答・純粋関数の結果を記録する（窓も設定も動かさない。設定は `tests/fixtures` の写し）。
-- `python3 tests/names.py lib/win/win/*.py`: 未定義の名前（NameError になりうる参照）を探す。
-- 小窓は実機で確かめる（キーを送る前に、前面が小窓か毎回確かめる）。
+- `python3 tests/names.py lib/win/win/*.py`: 未定義の名前（NameError になりうる参照）と、使っていないインポートを探す。
+- 小窓は実機で確かめる。キーを送る前に、前面が小窓か毎回確かめる（外れると、キーが別の窓に入る）。
 
-## 既知の課題（今後）
+## 7. 既知の課題
 
-- 対話型の小窓は、`dialog.Dialog` に寄せている（`place`・`here`・`set`・`pick` が乗っている）。`win layout` の 2 段階（`layouts`・`tile` のメッセージ）と、拡張の `pick()`・端末版の対話は、まだ別の作り。詳細は `docs/interactive-design.md`。
+- `win layout` の Tab（決めて残りを前面の窓から自動）の経路は、実機では動かしていない（窓を動かすため）。
+- 端末版の対話（`layout -i -t`）が使う `line_from_picker` は、`pick_rows` に切り替えたが、実機では動かしていない。
+- 遅延インポート（約 20 か所）を減らすには、使う部品（窓の可視判定・タイル逆算・小窓の起動）を下の層へ移す。
+- `keep_selection`（`Dialog`）は、実機で確かめていない。
