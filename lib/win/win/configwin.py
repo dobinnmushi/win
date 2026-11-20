@@ -286,7 +286,7 @@ def run_config(page="shortcuts"):
             self.toast("キーを解除しました" if not accel else f"{accel_label(accel)} に設定しました（反映まで数秒かかることがあります）")
             self.refresh()
 
-        def shortcut_row(self, slug, title, subtitle, current, name, command, default=None, deletable=False,
+        def shortcut_row(self, slug, title, subtitle, current, name, command, deletable=False,
                          editable=False, kind=None):
             row = plain(Adw.ActionRow, title=title, subtitle=subtitle)
             row.set_subtitle_lines(1)
@@ -296,10 +296,6 @@ def run_config(page="shortcuts"):
             if current:
                 btns.append(self.icon_button("edit-clear-symbolic",
                             lambda: self.set_binding(slug, name, command, ""), "キーを解除"))
-            if default and current != default:
-                btns.append(self.icon_button("edit-undo-symbolic",
-                            lambda: self.set_binding(slug, name, command, default),
-                            f"既定（{accel_label(default)}）に戻す"))
             if editable:
                 btns.append(self.icon_button("document-edit-symbolic", lambda: self.shortcut_form(slug), "名前とコマンドを編集"))
             if deletable:
@@ -325,10 +321,10 @@ def run_config(page="shortcuts"):
             kbs = {e["slug"]: e for e in kb_list()}
             rows = {g: [] for g, _ in ACTION_GROUPS}          # グループ → 行（目的別に並べる。種類は行の印で示す）
             slot_rows = []
-            for slug, label, args, default, group in WIN_ACTIONS:
+            for slug, label, args, group in WIN_ACTIONS:
                 e = kbs.get(slug)
                 row = self.shortcut_row(slug, label, f"win {args}", e["binding"] if e else "",
-                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", default=default, kind="組み込み")
+                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", kind="組み込み")
                 (slot_rows if slug.startswith("win-slot-") else rows[group]).append(row)
             if slot_rows:                                     # 1〜9 は 1 行にまとめ、開くと 9 個のキーを付けられる
                 bound = sum(1 for slug, *_ in WIN_ACTIONS if slug.startswith("win-slot-") and kbs.get(slug, {}).get("binding"))

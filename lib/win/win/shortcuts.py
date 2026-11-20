@@ -39,29 +39,29 @@ ACTION_GROUPS = [
 ]
 
 
-# win の標準の操作（slug, 表示名, 引数, 既定のキー, グループ）。slug は dconf の項目名
+# win の標準の操作（slug, 表示名, 引数, グループ）。slug は dconf の項目名。既定のキーは持たない（割り当ては presets/ か自分の shortcuts.toml）
 WIN_ACTIONS = [
-    ("win-pick", "窓を選んで前面に出す", "pick", "<Super><Alt>p", G_MOVE),
-    ("win-prompt", "コマンドを入力して窓を操作", "prompt", "<Super><Alt>semicolon", G_CMD),
-    ("win-nav-prev-d", "前の窓へ（左手）", "nav prev", "<Super><Alt>d", G_MOVE),
-    ("win-nav-next-f", "次の窓へ（左手）", "nav next", "<Super><Alt>f", G_MOVE),
-    ("win-focus-prev", "直前の窓へ（交互に切り替える）", "focus @prev", "<Super><Alt>e", G_MOVE),
-    ("win-focus-other-monitor", "反対側のモニタの窓へ", "focus @monitor:other", "<Super><Alt>q", G_MOVE),
-    ("win-stack-prev", "重なった窓の、前の層を表示", "stack prev", "<Shift><Super><Alt>t", G_MOVE),
-    ("win-group-prev", "グループの、前のメンバーを表示", "group prev", "<Shift><Super><Alt>g", G_MOVE),
-    ("win-send", "窓を、別のモニタへ送る", "send", "<Super><Alt>v", G_ARRANGE),
-    ("win-undo", "直前の操作を元に戻す", "undo", "<Super><Alt>z", G_ARRANGE),
-    ("win-stack-next", "重なった窓の、次の層を表示", "stack next", "<Super><Alt>t", G_MOVE),
-    ("win-stack-list", "重なった窓の層を、一覧から選ぶ", "stack list", "<Super><Alt>y", G_MOVE),
-    ("win-group-next", "グループの、次のメンバーを表示", "group next", "<Super><Alt>g", G_MOVE),
-    ("win-group-select", "グループのメンバーを、一覧から選ぶ", "group select", "<Super><Alt>u", G_MOVE),
-    ("win-layout", "型を選んで窓を並べる", "layout", "<Super><Alt>m", G_ARRANGE),
-    ("win-here", "選んだ窓を今の窓と同じ形にする", "here", "<Super><Alt>o", G_ARRANGE),
-    ("win-set", "保存した並び（セット）を選んで適用", "set", "<Super><Alt>s", G_SET),
-    ("win-nav-next", "次の窓へ（いまの並びの番号順）", "nav next", "<Super><Alt>j", G_MOVE),
-    ("win-nav-prev", "前の窓へ（いまの並びの番号順）", "nav prev", "<Super><Alt>k", G_MOVE),
-    *[(f"win-slot-{n}", f"{n} 番目のタイルの窓へ", f"focus @slot:{n}", f"<Super><Alt>{n}", G_MOVE) for n in range(1, 10)],
-    ("win-config", "win の設定を開く", "config", "<Super><Alt>comma", G_OTHER),
+    ("win-pick", "窓を選んで前面に出す", "pick", G_MOVE),
+    ("win-prompt", "コマンドを入力して窓を操作", "prompt", G_CMD),
+    ("win-nav-prev-d", "前の窓へ（左手）", "nav prev", G_MOVE),
+    ("win-nav-next-f", "次の窓へ（左手）", "nav next", G_MOVE),
+    ("win-focus-prev", "直前の窓へ（交互に切り替える）", "focus @prev", G_MOVE),
+    ("win-focus-other-monitor", "反対側のモニタの窓へ", "focus @monitor:other", G_MOVE),
+    ("win-stack-prev", "重なった窓の、前の層を表示", "stack prev", G_MOVE),
+    ("win-group-prev", "グループの、前のメンバーを表示", "group prev", G_MOVE),
+    ("win-send", "窓を、別のモニタへ送る", "send", G_ARRANGE),
+    ("win-undo", "直前の操作を元に戻す", "undo", G_ARRANGE),
+    ("win-stack-next", "重なった窓の、次の層を表示", "stack next", G_MOVE),
+    ("win-stack-list", "重なった窓の層を、一覧から選ぶ", "stack list", G_MOVE),
+    ("win-group-next", "グループの、次のメンバーを表示", "group next", G_MOVE),
+    ("win-group-select", "グループのメンバーを、一覧から選ぶ", "group select", G_MOVE),
+    ("win-layout", "型を選んで窓を並べる", "layout", G_ARRANGE),
+    ("win-here", "選んだ窓を今の窓と同じ形にする", "here", G_ARRANGE),
+    ("win-set", "保存した並び（セット）を選んで適用", "set", G_SET),
+    ("win-nav-next", "次の窓へ（いまの並びの番号順）", "nav next", G_MOVE),
+    ("win-nav-prev", "前の窓へ（いまの並びの番号順）", "nav prev", G_MOVE),
+    *[(f"win-slot-{n}", f"{n} 番目のタイルの窓へ", f"focus @slot:{n}", G_MOVE) for n in range(1, 10)],
+    ("win-config", "win の設定を開く", "config", G_OTHER),
 ]
 
 

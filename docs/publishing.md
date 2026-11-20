@@ -14,6 +14,10 @@
 | **環境の前提**（キー入力まわり） | keyd の変換レイヤーの設定（`configwin`・`shortcuts` に約 50 箇所）、IME（IBus・Mozc）の切り替え | 任意の機能として、keyd が見つかるときだけ出す | 分離してから |
 | **個人の設定** | ショートカットの割り当て（いまは **dconf にしかなく、版管理されていない**）、keyd の設定、`commands.toml`・`sets.toml`、自作の拡張（`swap`・`merge`・`split` は、汎用の見本として `examples/` へ）、想定の使い方とキー表（`design.md` 4.4）、環境の癖の記録 | リポジトリの外（`~/.config/win/` と、別の設定用リポジトリ） | 公開しない |
 
+### 進捗（2026-11-21）
+- 済: `win shortcuts`（export・apply）、個人設定のリポジトリ `win-config`、keyd・変換キー前提の機能の削除（個人側へ）、標準の割り当てのプリセット化（コードは既定のキーを持たず、`presets/super-alt.toml` が 29 項目を持つ）。
+- 残: アプリのアダプタ表（`apps.toml`）、設計と個人の記録の分離の仕上げ、README・導入。
+
 ### 切り分けのために足すもの（案）
 1. **宣言的なショートカット設定**: `~/.config/win/shortcuts.toml`（個人のファイル）と `win shortcuts apply|export`。いまは割り当てが dconf だけにあるので、再インストールで失われる。標準の割り当て（`Super+Alt+◯` 29 個は keyd の変換レイヤーを前提にした個人向けの選択）は、**既定を未割り当て**にし、**プリセット**（`presets/super-alt.toml` など）として同梱する。
 2. **keyd 連携の任意化**: 設定の窓の keyd の項目は、`/etc/keyd` があるときだけ出す。

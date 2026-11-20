@@ -1,0 +1,176 @@
+# win の標準のショートカット（Super+Alt+文字キー）。`win shortcuts apply presets/super-alt.toml` で GNOME に反映する。
+# 一部だけ使うときは、必要な項目を自分の shortcuts.toml にコピーして編集する。
+
+[[shortcut]]
+slug = "win-pick"
+name = "win pick（窓を選んで前面に出す）"
+binding = "<Super><Alt>p"
+command = "win pick"
+
+[[shortcut]]
+slug = "win-prompt"
+name = "win prompt（コマンドを入力して窓を操作）"
+binding = "<Super><Alt>semicolon"
+command = "win prompt"
+
+[[shortcut]]
+slug = "win-nav-prev-d"
+name = "win nav prev（前の窓へ（左手））"
+binding = "<Super><Alt>d"
+command = "win nav prev"
+
+[[shortcut]]
+slug = "win-nav-next-f"
+name = "win nav next（次の窓へ（左手））"
+binding = "<Super><Alt>f"
+command = "win nav next"
+
+[[shortcut]]
+slug = "win-focus-prev"
+name = "win focus @prev（直前の窓へ（交互に切り替える））"
+binding = "<Super><Alt>e"
+command = "win focus @prev"
+
+[[shortcut]]
+slug = "win-focus-other-monitor"
+name = "win focus @monitor:other（反対側のモニタの窓へ）"
+binding = "<Super><Alt>q"
+command = "win focus @monitor:other"
+
+[[shortcut]]
+slug = "win-stack-prev"
+name = "win stack prev（重なった窓の、前の層を表示）"
+binding = "<Shift><Super><Alt>t"
+command = "win stack prev"
+
+[[shortcut]]
+slug = "win-group-prev"
+name = "win group prev（グループの、前のメンバーを表示）"
+binding = "<Shift><Super><Alt>g"
+command = "win group prev"
+
+[[shortcut]]
+slug = "win-send"
+name = "win send（窓を、別のモニタへ送る）"
+binding = "<Super><Alt>v"
+command = "win send"
+
+[[shortcut]]
+slug = "win-undo"
+name = "win undo（直前の操作を元に戻す）"
+binding = "<Super><Alt>z"
+command = "win undo"
+
+[[shortcut]]
+slug = "win-stack-next"
+name = "win stack next（重なった窓の、次の層を表示）"
+binding = "<Super><Alt>t"
+command = "win stack next"
+
+[[shortcut]]
+slug = "win-stack-list"
+name = "win stack list（重なった窓の層を、一覧から選ぶ）"
+binding = "<Super><Alt>y"
+command = "win stack list"
+
+[[shortcut]]
+slug = "win-group-next"
+name = "win group next（グループの、次のメンバーを表示）"
+binding = "<Super><Alt>g"
+command = "win group next"
+
+[[shortcut]]
+slug = "win-group-select"
+name = "win group select（グループのメンバーを、一覧から選ぶ）"
+binding = "<Super><Alt>u"
+command = "win group select"
+
+[[shortcut]]
+slug = "win-layout"
+name = "win layout（型を選んで窓を並べる）"
+binding = "<Super><Alt>m"
+command = "win layout"
+
+[[shortcut]]
+slug = "win-here"
+name = "win here（選んだ窓を今の窓と同じ形にする）"
+binding = "<Super><Alt>o"
+command = "win here"
+
+[[shortcut]]
+slug = "win-set"
+name = "win set（保存した並び（セット）を選んで適用）"
+binding = "<Super><Alt>s"
+command = "win set"
+
+[[shortcut]]
+slug = "win-nav-next"
+name = "win nav next（次の窓へ（いまの並びの番号順））"
+binding = "<Super><Alt>j"
+command = "win nav next"
+
+[[shortcut]]
+slug = "win-nav-prev"
+name = "win nav prev（前の窓へ（いまの並びの番号順））"
+binding = "<Super><Alt>k"
+command = "win nav prev"
+
+[[shortcut]]
+slug = "win-slot-1"
+name = "win focus @slot:1（1 番目のタイルの窓へ）"
+binding = "<Super><Alt>1"
+command = "win focus @slot:1"
+
+[[shortcut]]
+slug = "win-slot-2"
+name = "win focus @slot:2（2 番目のタイルの窓へ）"
+binding = "<Super><Alt>2"
+command = "win focus @slot:2"
+
+[[shortcut]]
+slug = "win-slot-3"
+name = "win focus @slot:3（3 番目のタイルの窓へ）"
+binding = "<Super><Alt>3"
+command = "win focus @slot:3"
+
+[[shortcut]]
+slug = "win-slot-4"
+name = "win focus @slot:4（4 番目のタイルの窓へ）"
+binding = "<Super><Alt>4"
+command = "win focus @slot:4"
+
+[[shortcut]]
+slug = "win-slot-5"
+name = "win focus @slot:5（5 番目のタイルの窓へ）"
+binding = "<Super><Alt>5"
+command = "win focus @slot:5"
+
+[[shortcut]]
+slug = "win-slot-6"
+name = "win focus @slot:6（6 番目のタイルの窓へ）"
+binding = "<Super><Alt>6"
+command = "win focus @slot:6"
+
+[[shortcut]]
+slug = "win-slot-7"
+name = "win focus @slot:7（7 番目のタイルの窓へ）"
+binding = "<Super><Alt>7"
+command = "win focus @slot:7"
+
+[[shortcut]]
+slug = "win-slot-8"
+name = "win focus @slot:8（8 番目のタイルの窓へ）"
+binding = "<Super><Alt>8"
+command = "win focus @slot:8"
+
+[[shortcut]]
+slug = "win-slot-9"
+name = "win focus @slot:9（9 番目のタイルの窓へ）"
+binding = "<Super><Alt>9"
+command = "win focus @slot:9"
+
+[[shortcut]]
+slug = "win-config"
+name = "win config（win の設定を開く）"
+binding = "<Super><Alt>comma"
+command = "win config"
