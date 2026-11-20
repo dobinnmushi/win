@@ -1,10 +1,13 @@
 """デスクトップ（ワークスペース）の取得・切り替え。Window Calls にはないので、自作の Shell 拡張 win-helper@local（D-Bus）を呼ぶ。"""
 
+import os
+
 from gi.repository import Gio, GLib
 
 from .common import WinError
 
-HELPER_NAME = "org.local.WinHelper"
+HELPER_NAME = os.environ.get("WIN_HELPER_NAME") or "org.local.WinHelper"      # D-Bus の名前（試験で模擬のサービスに向けるときだけ差し替える）
+HELPER_IFACE = "org.local.WinHelper"
 HELPER_PATH = "/org/local/WinHelper"
 HELPER_MISSING = ("デスクトップの切り替えには、拡張 win-helper@local が要ります"
                   "（~/.local/share/gnome-shell/extensions/win-helper@local。有効にしたあと、再ログインして読み込ませてください）")
@@ -14,7 +17,7 @@ def helper_call(method, fmt=None, *args):
     """win-helper@local の method を呼んで、戻り値を返す。拡張が読み込まれていなければ WinError。"""
     try:
         proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
-                                               HELPER_NAME, HELPER_PATH, HELPER_NAME, None)
+                                               HELPER_NAME, HELPER_PATH, HELPER_IFACE, None)
         params = GLib.Variant(f"({fmt})", args) if fmt else None
         return proxy.call_sync(method, params, Gio.DBusCallFlags.NONE, 3000, None).unpack()
     except GLib.Error as e:

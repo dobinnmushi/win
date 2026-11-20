@@ -97,7 +97,10 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **窓のデスクトップ**: `List` の `workspace`（0 から）と、`MoveToWorkspace`（Window Calls）で足りる。`Window.desktop`（1 から。代入すると、その窓を移す）は拡張なしで動く。`win desktop list` も、窓の一覧から数えるので、拡張なしで動く。
 - **切り替え**: Window Calls にも GNOME Shell の `Eval`（無効）にもないので、自作の Shell 拡張 `win-helper@local` が D-Bus（`org.local.WinHelper`: `Workspaces`・`Switch`・`SwitchRelative`）で公開する。`raise-claude@local` と同じ作り。win 側は `desktop.py`（`desktops()`・`switch_desktop(n)`・`switch_relative(d)`）、コマンドは `win desktop [N|next|prev|list]`、拡張からは `desktops()`・`switch_desktop(n, relative)`。拡張がなければ、導入の案内つきの `WinError`。
 - **導入**: `extension/install.sh`（~/.local/share/gnome-shell/extensions/ へ複写）。Wayland では、読み込みに再ログインが要る。`enabled-extensions` には追記済み（取り消し: `gnome-extensions disable win-helper@local`）。
-- **確認の範囲**: 拡張の D-Bus の約束は、`extension.js` の `import` の 1 行を差し替えた写しを gjs で動かし（Shell の代わりに模擬の `global`）、win 側から呼んで確認した（`tests/helper_test.py`）。**Shell への読み込みと、実際の切り替えは、再ログイン後でないと確かめられない**。
+- **確認の範囲**:
+  - D-Bus の約束は、`extension.js` の `import` の 1 行を差し替えた写しを gjs で動かし（Shell の代わりに模擬の `global`）、win 側から呼んで確認した（`tests/helper_test.py`。本物の拡張と重ならないよう、模擬は `org.local.WinHelperTest` の名前で動き、win 側は `WIN_HELPER_NAME` でそこへ向ける）。
+  - **再ログイン後に、実機で確認した**（2026-11-21）: 拡張が読み込まれ（`gnome-extensions info` が ACTIVE）、`win desktop`（表示）・`2`・`1`・`next`・`prev`・範囲外・不正な指定が、期待どおりに動いた。
+- **List の `workspace` の癖**: 副モニタの窓（全デスクトップに出ている）は、`workspace` が「いまのデスクトップ」に追従する。`win desktop list` で、副モニタの窓は、いまいるデスクトップに数えられる。
 - 方針: 動的ワークスペースでは、末尾に空のデスクトップが 1 つあるので、`count` はそれを含む。切り替えは端で一巡しない。
 
 ## 5. 対話型の小窓

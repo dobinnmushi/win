@@ -9,6 +9,8 @@ import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MOCK_NAME = "org.local.WinHelperTest"                                # 本物の拡張（org.local.WinHelper）が動いていても、重ならない名前
+os.environ["WIN_HELPER_NAME"] = MOCK_NAME
 sys.path.insert(0, os.path.join(ROOT, "lib", "win"))
 import win  # noqa: E402
 
@@ -30,7 +32,7 @@ if os.path.exists(INSTALLED):
 # 1. 拡張が読み込まれていないとき（サービスがない）のメッセージ
 try:
     win.desktops()
-    print("（すでに org.local.WinHelper が動いているので、未読み込みの確認は飛ばす）")
+    print("（試験用の名前が、すでに使われている）")
 except win.WinError as e:
     check("拡張がないときのメッセージ", "win-helper@local" in str(e) and "再ログイン" in str(e), True)
 
@@ -38,6 +40,8 @@ except win.WinError as e:
 src = open(EXT, encoding="utf-8").read()
 src, n = re.subn(r"import \{Extension\} from 'resource:[^']*';", "const Extension = class {};", src)
 assert n == 1, "extension.js の import の形が変わった"
+src, n = re.subn(r"Gio\.DBus\.session, 'org\.local\.WinHelper',", f"Gio.DBus.session, '{MOCK_NAME}',", src)
+assert n == 1, "extension.js の D-Bus の名前の形が変わった"
 tmp = tempfile.mkdtemp(prefix="win-helper-")
 copy = os.path.join(tmp, "extension.js")
 open(copy, "w", encoding="utf-8").write(src)
@@ -45,7 +49,7 @@ env = dict(os.environ, HELPER_COPY=copy, HELPER_SECONDS="25")
 p = subprocess.Popen(["gjs", "-m", os.path.join(ROOT, "tests", "helper_gjs.js")], env=env, stderr=subprocess.PIPE, text=True)
 try:
     for _ in range(50):
-        if subprocess.run(["busctl", "--user", "status", "org.local.WinHelper"], capture_output=True).returncode == 0:
+        if subprocess.run(["busctl", "--user", "status", MOCK_NAME], capture_output=True).returncode == 0:
             break
         time.sleep(0.1)
     else:
@@ -65,7 +69,7 @@ try:
             check(label + " は失敗するはず", "成功", "WinError")
         except win.WinError as e:
             check(label, str(e).startswith("デスクトップ"), True)
-    out = subprocess.run(["busctl", "--user", "call", "org.local.WinHelper", "/org/local/WinHelper", "org.local.WinHelper", "Switch", "i", "99"],
+    out = subprocess.run(["busctl", "--user", "call", MOCK_NAME, "/org/local/WinHelper", "org.local.WinHelper", "Switch", "i", "99"],
                          capture_output=True, text=True).stdout.strip()
     check("拡張の Switch(99)（範囲外）は false", out, "b false")
     # コマンド（win desktop）の経路
