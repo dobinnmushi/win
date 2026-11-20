@@ -1,4 +1,4 @@
-# win の設計メモ（2026-11-20 時点）
+# win の設計メモ（2026-11-21 時点）
 
 GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道具。本体は Python のパッケージ（`lib/win/win/`）、起動役は `bin/win`。
 
@@ -7,7 +7,7 @@ GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道�
 ```
 bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
 lib/win/win/            本体（23 のモジュール）
-tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・fixtures/
+tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
 docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）
 ~/.config/win/          利用者の設定: commands.toml・sets.toml・layouts.toml（任意）・ext/（拡張の Python）
 ```
@@ -112,4 +112,9 @@ docs/                   design.md（この文書）・interactive-design.md（�
 ## 7. 既知の課題
 
 - 遅延インポート（約 20 か所）を減らすには、使う部品（窓の可視判定・タイル逆算・小窓の起動）を下の層へ移す。
-- `keep_selection`（`Dialog`）は、実機で確かめていない。
+- 実機で確かめていないこと:
+  - `Dialog` の `keep_selection`。
+  - 端末版の対話（`layout -i -t`）に `--preview`（番号の目印の窓）を付けた場合。
+  - 並行化（`layout`・旧形式の `set`）で、窓が数十枚ある場合と、別ワークスペースの窓を含む場合。
+  - Firefox の保存した大きさの復元は、タイミング依存で、毎回は再現しない（`tests/resetter.py` の代役の窓で確認した）。
+  - 最大化した窓は、置き先のモニタへは移らない（最大化はその窓がいるモニタのまま。従来からの動き）。
