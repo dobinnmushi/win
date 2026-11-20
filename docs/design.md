@@ -40,12 +40,29 @@ win で呼べる名前つきの操作（アクション）は、実装の入れ�
 - 小窓の中でモニタを切り替えるときは、既定を書き換えず、新しい `Screen` を作って関数に渡す（`place_move` は新しい `Screen` を返す。`gui_layout_flow` は `args.monitor` で持ち回る）。
 - `current_tiles`・`slot_map`・`free_rects`・`place_targets`・`monitors_for_preview` は、`screen` を省くと既定を使う。
 
+## パッケージの構成（lib/win/win/）
+
+`~/.local/bin/win` は `bin/win`（起動役）へのリンクで、起動役は自分の実体の位置から `lib/win/` を見つけて `import win` する。
+本体は 20 のモジュール。依存は下から上へ向かい、下のモジュールは上のモジュールを読み込まない。
+
+| 層（下 → 上） | モジュール |
+|---|---|
+| 基礎 | `common`（定数・標準ライブラリ）、`screen`（Screen・作業領域・設定の読み込み）、`layouts`（型の式・タイルの計算）、`shortcuts`（GNOME のカスタムショートカット）、`dbus`（Window Calls・窓の指定） |
+| 保存・配置 | `store`（commands.toml・sets.toml）、`pickwin`（窓の一覧の小窓）、`placement`（win layout）、`simple`（list・focus・move・size・state・close）、`textui`、`nav` |
+| 状態・セット | `sets`、`prompt`（コマンド入力の小窓・補完）、`appstate`（いまの並びの逆算・Firefox/端末の状態） |
+| 小窓・拡張 | `tilepick`（絞り込みの小窓）、`ext`（拡張と winapi）、`lsp` |
+| 画面・入口 | `configwin`（設定の窓）、`overlay`（place・here）、`cli`（main・build_parser） |
+
+- 逆向きの依存（下のモジュールが上のモジュールの関数を使う 18 か所）は、使う関数の中での遅延インポートにしてある（`# 逆向きの依存` の印つき）。モジュール直下（定数・クラス本体・デコレータ）の参照は、必ず下向き。
+- 遅延インポートの一覧: `find_screen`→`dbus`、`at_window(s)`→`nav`・`appstate`・`tilepick`、`cmd_layout`→`tilepick`、`run_entry`・`run_inline`→`cli`、`run_arrangement`→`overlay`、`builtin_commands`→`cli` など。減らすには、これらの関数が使う部品（窓の可視判定・タイル逆算・小窓の起動）を、下の層へ移すか、関数を引数で受け取る形にする。
+- `win.名前` で、すべてのモジュールの名前を引ける（`__init__` が集める。試験・古い呼び出し方のため）。
+
 ## 試験
 
 - `python3 tests/snapshot.py > before.txt`（変更前）→ `after.txt`（変更後）→ `diff`。ヘルプ・型の一覧・LSP の応答・純粋関数の結果を記録する（窓も設定も動かさない。設定は `tests/fixtures` の写し）。
-- `python3 tests/names.py lib/win/*.py`: 未定義の名前（NameError になりうる参照）を探す。
+- `python3 tests/names.py lib/win/win/*.py`: 未定義の名前（NameError になりうる参照）を探す。
 - 小窓は実機で確かめる（キーを送る前に、前面が小窓か毎回確かめる）。
 
 ## 既知の課題（今後）
 
-- `win.py` が 1 ファイル 6700 行を超えている。節どうしが循環して依存している（18 の節のうち 15 が 1 つの循環）ので、機械的には分けられない。
+- 対話型の小窓の作りが、用途ごとに別々（`tilepick`・`setpick`・`pick`・`prompt`・`config`）。拡張から使える共通の部品にしたい（検討中）。
