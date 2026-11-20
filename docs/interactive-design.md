@@ -88,9 +88,9 @@ with ui.dialog(title="置き先を選ぶ", hint="←→ で置き先を動かす
 - `dialog.py`: `Dialog`（with と `events()`）、`Item`・`Map`・`Event`、`choose`・`confirm`・`ask`・`pick_tile`・`pick_window`・`window_items`。
 - `winapi` に上のものを公開（`winapi.pyi`・`win help api`・LSP の補完にも出る）。
 - `place`・`here` を `Dialog` の上に書き直した（拡張と同じ部品。左右矢印のキー処理は、親の Python に移った）。
-- 実機で、拡張から `choose`（地図つき）・`confirm`・`ask`・`pick_tile`・`Dialog`（キー・Ctrl+S・通知）が動くのを確認した。
+- 実機で、拡張から `choose`（選択が動くたびに地図が変わる）・`confirm`・`ask`・`pick_tile`・`Dialog`（キー・Ctrl+S・通知）が動くのを確認した。`ask` の初期値、`confirm` の Esc（False）、`pick_tile` の矢印移動も通した。
 
 まだのこと:
 - 5 の一部: 描画の部品の旧メッセージ（`layouts`・`tile`）は残っている（`win layout` の 2 段階がこれを使う）。`show` への統一はしていない。
 - `set`（`_setpick`）と `pick`（`_pick`）・拡張の `pick()`（`pick_interactive`）は、`Dialog` に乗せ換えていない。
-- `choose` の `preview`（選択が動くたびの地図）と、`keep_selection`・`highlight` は、`choose` の経路でしか実機で確かめていない。
+- `keep_selection` は、実機で確かめていない（`highlight`・`preview` は `choose` で確認済み）。
