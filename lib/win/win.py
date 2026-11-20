@@ -1186,12 +1186,9 @@ TILE_HINT = "↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 
 
 
 def screen_info():
-    """ミニ地図に描く、画面全体（全モニタ）と作業領域の位置。{"monitors": [(x, y, w, h)…], "work": (x, y, w, h)}。取れなければ None。"""
-    try:
-        monitors, logical = display_state()
-        return {"monitors": [logical_rect(lm, monitors) for lm in logical], "work": work_area(load_config())}
-    except (WinError, StopIteration):
-        return None
+    """ミニ地図に描く、全モニタ {"monitors": [{"name", "rect", "work"}…], "current": 基準モニタの添字}。取れなければ None。"""
+    mons, cur = monitors_for_preview(load_config())
+    return {"monitors": mons, "current": cur} if mons else None
 
 
 def spawn_tilepick():
@@ -1211,19 +1208,21 @@ def run_tilepick():
     from gi.repository import Adw, Gdk, Gtk, Pango
 
     MAP_W, MAP_H = 300, 150
-    scr = None                                    # 全モニタを囲む枠 bbox・作業領域 work・各モニタ monitors（画面の座標）。無ければ従来どおり作業領域だけの地図
+    scr = None                                    # 全モニタを囲む枠 bbox と各モニタ monitors（name・rect・work。画面の座標）。無ければ従来どおり作業領域だけの地図
+    cur_mon = 0
     try:
         info = json.loads(os.environ.get("WIN_SCREEN") or "null")
         if info and info["monitors"]:
-            mons = [tuple(m) for m in info["monitors"]]
-            bx, by = min(m[0] for m in mons), min(m[1] for m in mons)
-            bw, bh = max(m[0] + m[2] for m in mons) - bx, max(m[1] + m[3] for m in mons) - by
+            mons = info["monitors"]
+            bx, by = min(m["rect"][0] for m in mons), min(m["rect"][1] for m in mons)
+            bw, bh = max(m["rect"][0] + m["rect"][2] for m in mons) - bx, max(m["rect"][1] + m["rect"][3] for m in mons) - by
             k = min(MAP_W / bw, MAP_H / bh)             # 縦横比を保って 300x150 に収める
             MAP_W, MAP_H = max(60, round(bw * k)), max(30, round(bh * k))
-            scr = {"bbox": (bx, by, bw, bh), "work": tuple(info["work"]), "monitors": mons}
+            scr = {"bbox": (bx, by, bw, bh), "monitors": mons}
+            cur_mon = min(max(info.get("current") or 0, 0), len(mons) - 1)
     except (ValueError, KeyError, TypeError):
         scr = None
-    st = {"windows": [], "apps": [], "rows": [], "busy": True, "stage": "tile", "layouts": []}
+    st = {"windows": [], "apps": [], "rows": [], "busy": True, "stage": "tile", "layouts": [], "mon": cur_mon}
 
     class App(Adw.Application):
         def __init__(self):
@@ -1252,12 +1251,15 @@ def run_tilepick():
                 child = nxt
             if scr:
                 bx, by, bw, bh = scr["bbox"]
-                for mx, my, mw, mh in scr["monitors"]:           # 画面全体を薄く描く（タイルはその上）
+                for n, m in enumerate(scr["monitors"]):          # 画面全体を薄く描く（タイルはその上）。並べる先のモニタだけ強調
+                    mx, my, mw, mh = m["rect"]
                     mon = Gtk.Box()
                     mon.add_css_class("screen-box")
+                    if n == st["mon"] and len(scr["monitors"]) > 1:
+                        mon.add_css_class("cur")
                     mon.set_size_request(max(4, round(mw / bw * MAP_W)), max(4, round(mh / bh * MAP_H)))
                     self.map.put(mon, round((mx - bx) / bw * MAP_W), round((my - by) / bh * MAP_H))
-                wx, wy, ww, wh = scr["work"]                     # タイルの座標は作業領域に対する割合なので、地図全体に対する割合へ直す
+                wx, wy, ww, wh = scr["monitors"][st["mon"]]["work"]    # タイルの座標は作業領域に対する割合なので、地図全体に対する割合へ直す
                 rects = [((wx + x * ww - bx) / bw, (wy + y * wh - by) / bh, w * ww / bw, h * wh / bh)
                          for x, y, w, h in rects]
             for i, (x, y, w, h) in enumerate(rects):
@@ -1334,17 +1336,38 @@ def run_tilepick():
             act = dict(st["rows"][row.get_index()]["act"])
             if rest:
                 act["rest"] = True
+            if st["stage"] == "layout" and self.multi_mon():
+                act["monitor"] = scr["monitors"][st["mon"]]["name"]       # 並べる先のモニタ
             self.reply(act)
+
+        def multi_mon(self):
+            return bool(scr) and len(scr["monitors"]) > 1
+
+        def layout_title(self):
+            return "型を選ぶ" + (f"（並べる先: {scr['monitors'][st['mon']]['name']}）" if self.multi_mon() else "")
+
+        def move_mon(self, d):
+            """いまのモニタから見て、左（d=-1）・右（d=1）にいちばん近いモニタへ（並び順ではなく実際の位置）。なければそのまま。"""
+            def center(m):
+                return m["rect"][0] + m["rect"][2] / 2, m["rect"][1] + m["rect"][3] / 2
+            mons = scr["monitors"]
+            cx, cy = center(mons[st["mon"]])
+            side = [(abs(center(m)[0] - cx) + abs(center(m)[1] - cy) / 4, n) for n, m in enumerate(mons)
+                    if n != st["mon"] and (center(m)[0] - cx) * d > 0]
+            if side:
+                st["mon"] = min(side)[1]
+                self.title_lab.set_text(self.layout_title())
+                self.on_row_selected(None, self.listbox.get_selected_row())
 
         # -- 親からの命令
         def on_message(self, m):
             c = m.get("cmd")
             if c == "layouts":
                 st["stage"], st["layouts"] = "layout", m["items"]
-                self.title_lab.set_text("型を選ぶ")
+                self.title_lab.set_text(self.layout_title())
                 self.entry.set_placeholder_text("型の名前で絞り込み（式も打てます: 1,2,2・1/1・v(1,h(1,1)) など）")
-                self.hint.set_text("↑↓ 選択（ミニ地図が変わる） ・ Enter 決定してタイルごとに選ぶ ・ "
-                                   "Tab 決定して前面の窓で自動配置 ・ Esc 閉じる")
+                self.hint.set_text("↑↓ 選択（ミニ地図が変わる）" + (" ・ ←→ 並べる先のモニタ" if self.multi_mon() else "")
+                                   + " ・ Enter 決定してタイルごとに選ぶ ・ Tab 決定して前面の窓で自動配置 ・ Esc 閉じる")
                 self.set_notice(m.get("notice"))
                 st["busy"] = False
                 self.entry.set_sensitive(True)
@@ -1389,6 +1412,7 @@ def run_tilepick():
             css.load_from_string(
                 ".tile-box { border: 1px solid alpha(currentColor, .35); border-radius: 4px; font-size: 8pt; }"
                 ".screen-box { background: alpha(currentColor, .05); border: 1px solid alpha(currentColor, .18); border-radius: 3px; }"
+                ".screen-box.cur { background: alpha(currentColor, .09); border: 2px solid alpha(@accent_bg_color, .9); }"
                 ".tile-box.cur { background: @accent_bg_color; color: @accent_fg_color; border-color: @accent_bg_color; }"
                 ".tile-box.done { background: alpha(currentColor, .12); }"
                 ".mode-chip { padding: 2px 10px; border-radius: 12px; background: alpha(currentColor, .12); font-size: 9pt; }")
@@ -1434,6 +1458,9 @@ def run_tilepick():
                     self.move(1)
                 elif name == "Up" or (ctrl and name in ("p", "k")):
                     self.move(-1)
+                elif name in ("Left", "Right") and st["stage"] == "layout" and self.multi_mon() \
+                        and not (state_mask & ~Gdk.ModifierType.LOCK_MASK):
+                    self.move_mon(1 if name == "Right" else -1)
                 elif name in ("Return", "KP_Enter"):
                     self.choose(False)
                 elif name in ("Tab", "ISO_Left_Tab"):
@@ -1583,6 +1610,10 @@ def gui_layout_flow(wc, args, cfg, area, gap):
             if res.get("act") != "layout":
                 return 0
             expr = resolve_layout(cfg, res["name"])
+            if res.get("monitor"):                       # 小窓で選んだモニタを基準にして並べる
+                resolve_monitor(res["monitor"])
+                args.monitor = res["monitor"]
+                area = work_area(cfg)
             try:
                 rects = compute_rects(expr, area, gap)
             except WinError as e:
@@ -1729,6 +1760,8 @@ def gui_interactive(wc, args, expr, rects, area, child=None, child_wid=None):
         toks.append("...")
     if toks:
         recipe = "layout " + shlex.quote(args.layout) + " " + " ".join(toks)
+        if getattr(args, "monitor", None):
+            recipe += " -m " + shlex.quote(args.monitor)
         print("同じ配置を再現するコマンド:\n  win " + recipe)
         save_history(recipe)
     return 0
