@@ -15,7 +15,7 @@ from gi.repository import Gio
 from .common import BUILTIN_LAYOUTS, CONFIG, DEFAULT_INSETS, WinError
 from .screen import load_config
 from .layouts import compute_rects
-from .shortcuts import ACTION_GROUPS, G_CMD, G_MOVE, G_OTHER, G_SET, HENKAN_KEYS, JP_KEYS, KEYD_CONF, KEYD_GENERATED, WIN_ACTIONS, WIN_BIN, accel_conflicts, accel_id, accel_label, accel_norm, accel_note, accel_parse, command_slug, ext_slug, henkan_layer_missing, henkan_map, kb_list, kb_remove, kb_set, keyd_full_layer_text, scan_accelerators, set_slug
+from .shortcuts import ACTION_GROUPS, G_CMD, G_MOVE, G_OTHER, G_SET, JP_KEYS, WIN_ACTIONS, WIN_BIN, accel_conflicts, accel_label, accel_norm, accel_note, accel_parse, command_slug, ext_slug, kb_list, kb_remove, kb_set, scan_accelerators, set_slug
 from .dbus import WindowCalls, normal_windows, selector_for
 from .store import SETS, check_win_line, describe_command, load_commands, load_sets, save_commands, save_sets, signature_markup, win_lines, write_toml
 from .sets import set_summary
@@ -151,7 +151,7 @@ def run_config(page="shortcuts"):
             state = {"accel": current or "", "syncing": False}
             shown = Gtk.Label(label=accel_label(current), focusable=True)       # 開いたときのフォーカス先（文字入力ではない）
             shown.add_css_class("title-1")
-            hint = Gtk.Label(label="割り当てたいキーを、実際に押してください（変換＋キーにするなら、変換を押しながら。Esc で取消）", wrap=True)
+            hint = Gtk.Label(label="割り当てたいキーを、実際に押してください（Esc で取消）", wrap=True)
             hint.add_css_class("dim-label")
             status = Gtk.Label(wrap=True, xalign=0, max_width_chars=60)
             entry = plain(Adw.EntryRow, title="キーを文字で入力（例: <Super><Alt>m）")
@@ -372,73 +372,6 @@ def run_config(page="shortcuts"):
                 g3.add(self.shortcut_row(slug, e["name"] or slug, e["command"], e["binding"], e["name"], e["command"],
                                          deletable=True, editable=True))
             box.append(g3)
-            if os.path.exists(KEYD_CONF):                      # keyd を使っていなければ、変換＋キーの案内は出さない
-                box.append(self.henkan_group())               # キー側からの索引（長いので、目的別のグループの後ろ）
-
-        def henkan_group(self):
-            """変換＋キーの一覧（どのキーに何が付いているか・空き）と、keyd を全キー分にする手順。"""
-            g = Adw.PreferencesGroup(
-                title="変換＋キー",
-                description="変換を押しながらキーを押すと、keyd が Super+Alt+キー にして、ここで付けたショートカットを呼びます。"
-                            "キーを付けるときは、取り込みの画面で変換を押しながらキーを押してください。")
-            g.set_header_suffix(self.button("読み直す", lambda: (self.refresh(), self.toast("keyd の設定を読み直しました"))))
-            missing = henkan_layer_missing()
-            if missing:
-                row = plain(Adw.ActionRow, title=f"変換＋キーにできないキーがあります（{len(missing)} 個）",
-                            subtitle="keyd の設定を一度だけ書き換えると、英字・数字・- ; , . / のすべてで作れるようになります（sudo が要ります）")
-                row.add_css_class("warning")
-                row.add_suffix(self.suffix_box(self.button("手順…", self.keyd_form, "suggested-action")))
-                g.add(row)
-            hm = henkan_map()
-            used_rows, free = [], []
-            for k, (gname, disp) in HENKAN_KEYS.items():
-                aid = accel_id(f"<Super><Alt>{gname}")
-                if aid not in hm:
-                    continue
-                who = [w.split(": ", 1)[-1] for w, _slug in self.used.get(aid, [])]
-                if who:
-                    used_rows.append((hm[aid], " ／ ".join(who)))
-                else:
-                    free.append(hm[aid])
-            for disp, who in sorted(used_rows):
-                r = plain(Adw.ActionRow, title=f"変換＋{disp}", subtitle=who)
-                r.set_subtitle_lines(1)
-                g.add(r)
-            g.add(plain(Adw.ActionRow, title="空いているキー", subtitle="　".join(sorted(free)) or "（なし）"))
-            return g
-
-        def keyd_form(self):
-            """keyd の [win] レイヤーを全キー分にした設定を作り、入れるコマンドを見せる（sudo は利用者が打つ）。"""
-            text = keyd_full_layer_text()
-            os.makedirs(os.path.dirname(KEYD_GENERATED), exist_ok=True)
-            with open(KEYD_GENERATED, "w", encoding="utf-8") as f:
-                f.write(text)
-            stamp = time.strftime("%Y%m%d")
-            cmd = (f"sudo cp {KEYD_CONF} {KEYD_CONF}.bak-{stamp} && sudo cp {KEYD_GENERATED} {KEYD_CONF} "
-                   f"&& sudo keyd.rvaiya reload")
-            info = Gtk.Label(wrap=True, xalign=0, label=(
-                f"新しい設定を {KEYD_GENERATED} に作りました。今の {KEYD_CONF} から、[win]（変換を押しながら）の部分だけを、"
-                "英字・数字・- ; , . / の全キーが Super+Alt+同じキー を出す形に変えたものです（CapsLock・無変換などはそのまま）。"
-                "端末で次のコマンドを打つと、今の設定を .bak に残して入れ替え、keyd に読み直させます。"))
-            code = Gtk.Label(label=cmd, wrap=True, xalign=0, selectable=True)
-            code.add_css_class("monospace")
-            note = Gtk.Label(wrap=True, xalign=0, label=(
-                "入れ替えた後、この画面の「読み直す」を押すと、変換＋キーの一覧が全キー分になります。"
-                "変換＋S は Super+Alt+S を出すようになるので、いま変換＋S で呼んでいるもの（Super+Alt+E）は付け直しが要ります。"))
-            note.add_css_class("dim-label")
-
-            def copy():
-                Gdk.Display.get_default().get_clipboard().set(cmd)
-                self.toast("コマンドをコピーしました")
-
-            btns = Gtk.Box(spacing=8, halign=Gtk.Align.END)
-            btns.append(self.button("閉じる", lambda: dlg.close()))
-            btns.append(self.button("コマンドをコピー", copy, "suggested-action"))
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=18,
-                          margin_start=18, margin_end=18)
-            for w in (info, code, note, btns):
-                box.append(w)
-            dlg = self.dialog("変換＋キーを全キー分にする", box, 640)
 
         def shortcut_form(self, slug):
             """名前とコマンドを入力する（新規なら、続けてキーを押して設定する）。"""

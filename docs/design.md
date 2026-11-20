@@ -84,7 +84,7 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **認識**: `appstate.tile_stacks`。いまの並び（`current_tiles`）の各タイルについて、枠の 4 辺が `STACK_TOL`（8px）以内の、最小化されていない窓を層にする。手前の層は、重なり順がいちばん上のもの。すべてが他の窓に覆われて見えない重なりは、並びに現れないので含めない。
 - **巡回**: 層は ID の昇順で一巡する（Activate だけだと、上の 2 枚を行き来するだけになるため、順を固定する）。保存するものはない。
 - **下の層の扱い**: 覆うだけ（最小化しない）。タイルの逆算・窓の一覧は、すでに覆われた窓を無視するので、そのまま動く。
-- `win stack [next|prev|list] [N]`（N=0 は前面の窓のいるタイル。`win stack N next` の順でもよい。標準のショートカット項目が `win stack next` を呼ぶため、動作を先に書ける形にした — 最初は番号を先にしか書けず、キーを押しても何も起きなかった）。`list` は `choose` の小窓（地図に各タイルの層の数、手前の層が先頭）。ショートカットの標準のショートカット項目は `win-stack-next`（Super+Alt+T、変換＋T）・`win-stack-list`（Super+Alt+Y、変換＋Y）で、割り当て済み（実キーと keyd 経由の両方を実機で確認）。拡張からは `stack(n)`（層の一覧）・`cycle(n, d)`（d 層ずらして前面へ）。
+- `win stack [next|prev|list] [N]`（N=0 は前面の窓のいるタイル。`win stack N next` の順でもよい。ショートカット項目が `win stack next` を呼ぶため、動作を先に書ける形にした — 最初は番号を先にしか書けず、キーを押しても何も起きなかった）。`list` は `choose` の小窓（地図に各タイルの層の数、手前の層が先頭）。ショートカットの標準のショートカット項目は `win-stack-next`（Super+Alt+T、変換＋T）・`win-stack-list`（Super+Alt+Y、変換＋Y）で、割り当て済み（実キーと keyd 経由の両方を実機で確認）。拡張からは `stack(n)`（層の一覧）・`cycle(n, d)`（d 層ずらして前面へ）。
 
 ## 4.1.1 窓のグループ（group）
 
@@ -118,28 +118,9 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **List の `workspace` の癖**: 副モニタの窓（全デスクトップに出ている）は、`workspace` が「いまのデスクトップ」に追従する。`win desktop list` で、副モニタの窓は、いまいるデスクトップに数えられる。
 - 方針: 動的ワークスペースでは、末尾に空のデスクトップが 1 つあるので、`count` はそれを含む。切り替えは端で一巡しない。
 
-## 4.4 使い方の想定・頻度・ショートカット（2026-11-21）
+## 4.4 使い方の想定・頻度・ショートカット
 
-実際の使用データはまだない（履歴は試験が中心）ので、**想定（推測）**で整理した。`win stats`（4.5）で実データが貯まったら、見直す。
-
-- **想定**: 2 画面（小さい内蔵 eDP-1 と、大きい外付けの主画面 HDMI-1）。よく使うアプリは Firefox・端末（nvim と Claude Code）・Claude Desktop・Slack・Thunderbird。
-- **頻度の段階**: A（毎分〜数分）窓の切り替え・アプリへ飛ぶ・反対のモニタへ／B（数十分〜時間ごと）重なり・グループの切り替え、`here`、別のモニタへ送る、閉じる／C（1 日数回）`layout`・`set`・グループの作成／D（まれ）保存・設定・定義・デスクトップ。
-- **キーの原則**: 変換キーは右親指なので、**高頻度の操作は左手の文字キー**に置く。次/前は隣り合うキー（D=前・F=次）か Shift の組（Shift+T・Shift+G）で対にする。小窓が開く操作は覚えやすい文字、破壊的な操作は押し間違いに注意。筋肉に入っているキー（J・K・O・P・M・S・`;` など）は動かさず、空きキーに足した。
-- **標準の割り当て**（変換＋キー＝`Super+Alt+キー`。スロット 1〜9 は `win focus @slot:N`）:
-
-| キー | 操作 | 段階 |
-|---|---|---|
-| D / F | `nav prev` / `nav next`（J・K も同じ） | A |
-| E | `focus @prev`（直前の窓と交互） | A |
-| Q | `focus @monitor:other`（反対のモニタの窓へ） | A |
-| W / R / A | アプリへ飛ぶ: Firefox・端末・Claude Desktop（`focus 'クラス?'`。なければ起動、あれば巡回） | A |
-| T / Shift+T | `stack next` / `stack prev`（Y は `stack list`） | B |
-| G / Shift+G | `group next` / `group prev`（U は `group select`） | B |
-| V | `send`（別のモニタへ送る） | B |
-| Z | `undo`（直前の操作を元に戻す） | B |
-| O / P / M / S / `;` / C | `here`・`pick`・`layout`・`set`・`prompt`・前面の窓を閉じる | B〜C |
-
-- A（Claude Desktop）は、押すとアプリが起動するので、試験から外した（`focus 'クラス?'` の動き自体は、電卓と Firefox で確認した）。W・R は実機で確認した。
+個人の使い方の想定とキー表は、本体ではなく個人設定（`win-config` の `docs/usage.md`）に置く。
 
 ## 4.5 新しい機能
 

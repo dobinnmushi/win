@@ -246,90 +246,10 @@ def accel_id(accel):
     return "+".join(mods + [key])
 
 
-# 変換＋キー: keyd（/etc/keyd/default.conf）の [win] レイヤーが、変換を押しながらのキーを Super+Alt+キー にする。
-# GNOME 側は Super+Alt+キー のショートカットとして登録するので、keyd さえ全キー分あれば、あとは sudo なしで付け外しできる。
-KEYD_CONF = os.environ.get("WIN_KEYD_CONF") or "/etc/keyd/default.conf"          # keyd がなければ、変換＋キーの案内は出さず、キーは Super+Alt+文字 と表示する
-
-
-KEYD_GENERATED = os.path.expanduser("~/.config/win/keyd-default.conf")
-
-
-# 変換＋キーにできるキー: keyd のキー名 → (GNOME のキー名, 表示)。日本語配列と US 配列で同じ文字になるものだけ
-# （@・[・^ などは配列で文字が変わり、keyd が出すキーと GNOME の登録が食い違うので外す）
-HENKAN_KEYS = {**{c: (c, c.upper()) for c in "abcdefghijklmnopqrstuvwxyz"}, **{d: (d, d) for d in "0123456789"},
-               "minus": ("minus", "-"), "semicolon": ("semicolon", ";"), "comma": ("comma", ","),
-               "dot": ("period", "."), "slash": ("slash", "/")}
-
-
-def keyd_win_layer(path=KEYD_CONF):
-    """keyd の [win] レイヤー {keyd のキー名: 出すもの（例 M-A-e）}。読めなければ空。"""
-    try:
-        text = open(path, encoding="utf-8").read()
-    except OSError:
-        return {}
-    out, inside = {}, False
-    for line in text.splitlines():
-        t = line.strip()
-        if t.startswith("["):
-            inside = t == "[win]"
-        elif inside and "=" in t and not t.startswith("#"):
-            k, v = (x.strip() for x in t.split("=", 1))
-            out[k] = v
-    return out
-
-
-def henkan_map():
-    """{GNOME の Super+Alt+キー の識別子: 変換＋何キーで出るか（表示）}。keyd の設定から作る。"""
-    names = {k: v for k, v in HENKAN_KEYS.items()}
-    out = {}
-    for key, produced in keyd_win_layer().items():
-        m = re.fullmatch(r"M-A-(\w+)", produced)
-        if m and m.group(1) in names and key in names:
-            out[accel_id(f"<Super><Alt>{names[m.group(1)][0]}")] = names[key][1]
-    return out
-
-
-def keyd_full_layer_text(path=KEYD_CONF):
-    """今の keyd の設定の [win] レイヤーだけを、変換＋キーにできる全キー（キー → Super+Alt+同じキー）にした設定の全文。"""
-    try:
-        text = open(path, encoding="utf-8").read()
-    except OSError:
-        text = "[ids]\n*\n\n[main]\nhenkan = overload(win, henkan)\n"
-    lines, out, inside, done = text.splitlines(), [], False, False
-    body = ["# 変換を押しながら: 英字・数字・- ; , . / を Super+Alt+同じキー にする（win の設定画面が作った。",
-            "# GNOME のショートカット Super+Alt+キー で win などを呼ぶ。付け外しは win config のショートカットのページで）",
-            "[win]"] + [f"{k} = M-A-{k}" for k in HENKAN_KEYS]
-    for line in lines:
-        t = line.strip()
-        if t.startswith("["):
-            if inside:
-                inside = False
-            if t == "[win]":
-                inside, done = True, True
-                while out and out[-1].lstrip().startswith("#"):   # [win] の直前の説明のコメントも差し替える
-                    out.pop()
-                out += body
-                continue
-        if not inside:
-            out.append(line)
-    if not done:
-        out += [""] + body
-    return "\n".join(out).rstrip("\n") + "\n"
-
-
-def henkan_layer_missing():
-    """変換＋キーにできるのに、keyd がまだ Super+Alt+同じキー にしていないキー（表示）。"""
-    layer = keyd_win_layer()
-    return [disp for k, (_g, disp) in HENKAN_KEYS.items() if layer.get(k) != f"M-A-{k}"]
-
-
 def accel_label(accel):
-    """画面に出す表記（例: 変換＋M、Super+Alt+M、変換、Super+半角/全角）。空なら「（未割り当て）」。"""
+    """画面に出す表記（例: Super+Alt+M、変換、Super+半角/全角）。空なら「（未割り当て）」。"""
     if not accel:
         return "（未割り当て）"
-    henkan = henkan_map().get(accel_id(accel))
-    if henkan:
-        return f"変換＋{henkan}"
     p = accel_parse(accel)
     if not p:
         return accel
@@ -391,8 +311,6 @@ def accel_note(accel):
     p = accel_parse(accel)
     if not p:
         return "キーの形式が読めません"
-    if accel_id(accel) in henkan_map():                  # 変換＋キー（keyd が出す Super+Alt+キー）は記号も含めて届く
-        return ""
     key, mods = p
     _, Gdk = _gtk()
     name = Gdk.keyval_name(key) or ""
