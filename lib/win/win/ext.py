@@ -23,7 +23,7 @@ from .store import COMMANDS, SETS, SIGNATURES, describe_command, launch_for_clas
 from .placement import launch, parse_window_spec, place_settled
 from .sets import run_entry, set_summary
 from .prompt import run_inline
-from .appstate import current_tiles, tile_order
+from .appstate import current_tiles, cycle_stack, find_stack, tile_order
 from .tilepick import slot_map
 from .pickers import pick_window_map
 from .dialog import Dialog, Event, Item, Map, ask, choose, confirm, pick_tile, window_items
@@ -296,6 +296,16 @@ class ApiDialog(Dialog):
 ApiDialog.__name__ = ApiDialog.__qualname__ = "Dialog"
 
 
+def api_stack(n=0):
+    """n 番目のタイル（0 は前面の窓のいるタイル）に重なっている窓（層）を、巡回の順（ID の昇順）に。"""
+    return [Window(w) for w in find_stack(_wc(), int(n))["layers"]]
+
+
+def api_cycle(n=0, d=1):
+    """n 番目のタイルの重なりで、いま手前の層から d 層ずらした窓を前面に出して返す（一巡する）。重なりがなければ WinError。"""
+    return Window(cycle_stack(_wc(), int(n), int(d))[1])
+
+
 def api_window_items(exclude=()):
     """今のワークスペースで最小化されていない窓を、一覧の行にする（value は Window）。"""
     return window_items(_wc(), exclude, wrap=Window)
@@ -530,7 +540,7 @@ def make_winapi():
                  "area": api_area, "run": api_run, "notify": api_notify, "sel": api_sel,
                  "layout": api_layout, "apply_set": api_apply_set, "run_command": api_run_command, "nav": api_nav,
                  "launch": api_launch, "layouts": api_layouts, "browse": api_browse, "term": api_term, "pick": api_pick, "slot_of": api_slot_of,
-                 "tiles": api_tiles, "slots": api_slots, "Item": Item, "Map": Map, "Event": Event, "Dialog": ApiDialog,
+                 "tiles": api_tiles, "slots": api_slots, "Item": Item, "Map": Map, "Event": Event, "Dialog": ApiDialog, "stack": api_stack, "cycle": api_cycle,
                  "choose": choose, "confirm": confirm, "ask": ask, "pick_tile": pick_tile, "pick_window": api_pick_window,
                  "window_items": api_window_items, "resolve": api_resolve, "Window": Window, "WinError": WinError}.items():
         setattr(m, k, v)
@@ -722,6 +732,12 @@ def pick_window(title: str = "窓を選ぶ", *, launch: bool = True, exclude: li
     \"\"\"窓を 1 枚選ぶ（launch なら、先頭 ! でアプリを起動してその窓）。選んだ窓、Esc なら None（pick と違い、例外にしない）。
     map を渡すと、ミニ地図も出す。\"\"\"
 
+def stack(n: int = 0) -> list[Window]:
+    \"\"\"n 番目のタイル（0 は前面の窓のいるタイル）に重なっている窓（層）を、巡回の順（ID の昇順）に返す。同じ位置（枠の 4 辺が 8px 以内）にある、
+    最小化されていない窓が層。手前の層は、重なり順がいちばん上のもの。層が 1 枚だけなら、要素 1 つのリスト。\"\"\"
+def cycle(n: int = 0, d: int = 1) -> Window:
+    \"\"\"n 番目のタイルの重なりで、いま手前の層から d 層（負なら前へ）ずらした窓を前面に出して返す。層は一巡する。重なりがなければ WinError。
+    例 cycle(0)  # 前面の窓のいるタイルで、次の層を表示する\"\"\"
 def layout(expr: str, *windows: Window | str, gap: int | None = None) -> None:
     \"\"\"型 expr（名前か式。例 "lr"・"v(1,2)"・"1,2:1/1"）のタイルに、windows を順に並べる。窓の指定の文字列も書ける。
     例 layout("v(1,1)", focused(), at("@prev"))\"\"\"
@@ -924,6 +940,7 @@ API_SECTIONS = [
     ("並べる・フォーカスを移す", ["layout", "layouts", "tiles", "area", "nav"]),
     ("登録したもの・win の命令を呼ぶ", ["apply_set", "run_command", "run"]),
     ("起動・通知", ["launch", "browse", "term", "notify"]),
+    ("重なった窓（層）", ["stack", "cycle"]),
     ("対話型の小窓（1 回で選ぶ）", ["choose", "confirm", "ask", "pick_tile", "pick_window", "window_items", "Item", "Map"]),
     ("対話型の小窓（やり取りを回す）", ["Dialog", "Dialog.rows", "Dialog.map", "Dialog.notice", "Dialog.keys", "Dialog.text", "Dialog.events", "Event"]),
 ]

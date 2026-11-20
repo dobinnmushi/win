@@ -15,6 +15,7 @@ Window Calls 拡張（window-calls@domandoman.xyz）の D-Bus を呼んで、
   win here                       選んだ窓（先頭 ! でアプリ）を、いまの窓と同じ位置・大きさにして前面へ（place 0 と同じ）
   win place 2 firefox            2 番目のタイルに Firefox を重ねる（窓を省くと小窓。←→ で置き先を動かせる）
   win place free firefox         いちばん広い空きスペースに Firefox を置く
+  win stack                      前面の窓のいる位置に重なった窓を、次の層へ切り替える（prev・list も）
   win pick                       窓の一覧を小さく出し、j/k・矢印・Enter で選んで前面に出す
   win nav left|right|up|down     表に出ている窓の間で、その向きの窓にフォーカスを移す
   win prompt                     コマンドを 1 行打って窓を操作する小窓（Tab 補完・履歴つき）

@@ -356,6 +356,66 @@ def current_tiles(wc, cfg, screen=None):
     return {"onmon": onmon, "other": other, "maxed": maxed, "items": items, "tree": tree, "dropped": dropped, "by_id": by_id}
 
 
+STACK_TOL = 8      # 枠の 4 辺がこれ以内（px）しかずれていない窓は、同じ位置に重なっているとみなす（最小サイズなどのずれを吸収する）
+
+
+def tile_stacks(wc, screen=None):
+    """いまの並びの各タイルに重なっている窓（層）を求める。タイルの番号順に
+    [{"index": 1 から, "rect": 枠, "layers": 層の窓（ID の昇順＝巡回の順）, "top": いちばん手前の窓の ID}]。
+    同じ位置（枠の 4 辺が STACK_TOL 以内）にある、最小化されていない窓を、そのタイルの層にする。
+    すべてが他の窓に覆われて見えない重なり（タイルの並びに現れないもの）は、含めない。"""
+    cfg = load_config()
+    screen = screen or default_screen()
+    cur = current_tiles(wc, cfg, screen)
+    if cur["tree"] is None:
+        return []
+    wins = []                                                 # (重なり順, 窓, 枠)。下 → 上
+    for z, w in enumerate(normal_windows(wc)):
+        if not w.get("in_current_workspace"):
+            continue
+        d = wc.details(w["id"])
+        if not d.get("minimized"):
+            wins.append((z, w, (d["x"], d["y"], d["width"], d["height"])))
+    near = lambda a, b: all(abs(p - q) <= STACK_TOL for p, q in zip(a, b))
+    out, taken = [], set()
+    for n, tid in enumerate(tile_order(cur, cfg)[1], 1):
+        top = next((t for t in wins if t[1]["id"] == tid), None)
+        if top is None:
+            continue
+        members = [(z, w) for z, w, r in wins if near(r, top[2]) and w["id"] not in taken]
+        taken.update(w["id"] for _, w in members)
+        out.append({"index": n, "rect": top[2], "layers": sorted((w for _, w in members), key=lambda w: w["id"]),
+                    "top": max(members)[1]["id"] if members else tid})
+    return out
+
+
+def find_stack(wc, n=0, stacks=None, screen=None):
+    """n 番目のタイル（0 は前面の窓のいるタイル）の重なり。なければ WinError。"""
+    stacks = tile_stacks(wc, screen) if stacks is None else stacks
+    if n == 0:
+        fid = focused(wc)["id"]
+        st = next((s for s in stacks if any(w["id"] == fid for w in s["layers"])), None)
+        if st is None:
+            raise WinError("前面の窓が、いまの並びのタイルの中にありません")
+        return st
+    if not 1 <= n <= len(stacks):
+        raise WinError(f"タイル {n} がありません（いまの並びのタイルは {len(stacks)} 枚）")
+    return stacks[n - 1]
+
+
+def cycle_stack(wc, n=0, d=1, screen=None):
+    """n 番目のタイル（0 は前面の窓のいるタイル）の重なりで、いま手前の層から d 層ずらした窓を前面に出す（層は ID の昇順で一巡）。
+    (重なり, 前面に出した窓) を返す。重なりがなければ WinError。"""
+    st = find_stack(wc, n, screen=screen)
+    layers = st["layers"]
+    if len(layers) < 2:
+        raise WinError(f"タイル {st['index']} に重なりはありません（窓は 1 枚）")
+    ids = [w["id"] for w in layers]
+    w = layers[(ids.index(st["top"]) + d) % len(layers)]
+    wc.simple("Activate", w["id"])
+    return st, w
+
+
 def tile_order(cur, cfg):
     """逆算した並びのタイル順の窓 ID（名前つきの型と同じ形なら、その型のタイル順）。"""
     kept = set(_tree_leaves(cur["tree"]))

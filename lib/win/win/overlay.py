@@ -4,15 +4,15 @@ import sys
 import time
 
 from .common import WinError
-from .screen import default_screen, find_screen, load_config
+from .screen import default_screen, find_screen, load_config, work_area
 from .dbus import WindowCalls, find_windows, focused, normal_windows, targets
 from .store import icon_for_class
 from .pickers import pick_rows
 from .placement import launch, place_settled
 from .nav import visible_windows
 from .sets import monitors_for_preview, next_monitor
-from .appstate import current_tiles, tile_order
-from .dialog import Dialog, Item, Map
+from .appstate import current_tiles, cycle_stack, find_stack, tile_order, tile_stacks
+from .dialog import Dialog, Item, Map, choose
 from .configwin import run_config
 
 
@@ -213,6 +213,45 @@ def cmd_place(args):
             print(notice, file=sys.stderr)
         return 0
     return gui_place(wc, front, screen, targets, index, args.min)
+
+
+def cmd_stack(args):
+    """同じ位置に重なった窓（層）を、次・前へ切り替える。list なら小窓で選ぶ。"""
+    wc = WindowCalls()
+    try:
+        n = int(args.n)
+    except ValueError:
+        raise WinError(f"タイルの番号か 0（前面の窓のいるタイル）を指定してください: {args.n}")
+    if args.action in ("next", "prev"):
+        st, w = cycle_stack(wc, n, 1 if args.action == "next" else -1)
+        k = [x["id"] for x in st["layers"]].index(w["id"]) + 1
+        print(f"タイル {st['index']}: 層 {k}/{len(st['layers'])}  {describe_window(w)}")
+        return 0
+    stacks = tile_stacks(wc)
+    st = find_stack(wc, n, stacks)
+    layers = st["layers"]
+    if len(layers) < 2:
+        raise WinError(f"タイル {st['index']} に重なりはありません（窓は 1 枚）")
+    ids = [w["id"] for w in layers]
+    i0 = ids.index(st["top"])
+    order = layers[i0:] + layers[:i0]                          # いま手前の層を先頭に、巡回の順に並べる
+    ax, ay, aw, ah = work_area(load_config())
+    rects = [((s["rect"][0] - ax) / aw, (s["rect"][1] - ay) / ah, s["rect"][2] / aw, s["rect"][3] / ah) for s in stacks]
+    m = Map(rects, [f"{len(s['layers'])}枚" if len(s["layers"]) > 1 else "" for s in stacks], stacks.index(st),
+            monitor=monitors_for_preview(load_config())[1])
+    items = [Item(f"{k}. " + window_row_title(w, wc.details(w["id"])), w.get("wm_class") or "", icon_for_class(w.get("wm_class")), w)
+             for k, w in ((ids.index(w["id"]) + 1, w) for w in order)]
+    sel = choose(f"タイル {st['index']} の重なり（{len(layers)} 層）", items, preview=lambda _it: m)
+    if sel is None:
+        return 1
+    time.sleep(0.2)                                            # 小窓が閉じて、フォーカスが戻るのを待ってから前面に出す
+    wc.simple("Activate", sel.value["id"])
+    return 0
+
+
+def describe_window(w):
+    """窓の 1 行の説明（クラスと題名）。"""
+    return f"{w.get('wm_class') or ''}「{(w.get('title') or '')[:50]}」"
 
 
 def cmd_here(args):

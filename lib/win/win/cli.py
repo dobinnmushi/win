@@ -16,7 +16,7 @@ from .appstate import cmd_browse, cmd_save, cmd_term
 from .tilepick import run_tile, run_tilepick
 from .ext import EXT, EXT_DIR, cmd_help, load_extensions, run_ext
 from .lsp import cmd_lsp
-from .overlay import cmd_close, cmd_config, cmd_here, cmd_move, cmd_pick, cmd_place, cmd_size, cmd_state
+from .overlay import cmd_close, cmd_config, cmd_here, cmd_move, cmd_pick, cmd_place, cmd_size, cmd_stack, cmd_state
 
 
 def main(argv=None):
@@ -43,7 +43,7 @@ def main(argv=None):
                 return report_error(e)
     args = ap.parse_args(argv)
     try:
-        if args.cmd in ("layout", "here", "place", "pick", "prompt", "save", "run", "set"):
+        if args.cmd in ("layout", "here", "place", "stack", "pick", "prompt", "save", "run", "set"):
             resolve_monitor(getattr(args, "monitor", None))      # 基準のモニタを、最初に 1 回決める
         return args.fn(args)
     except WinError as e:
@@ -131,6 +131,12 @@ def build_parser():
     p.add_argument("n", nargs="?", default="0", help="はじめの置き先。タイルの番号（0 は前面の窓の位置）か free（いちばん広い空きスペース）")
     p.add_argument("window", nargs="?", help="置く窓（クラス・題名の一部、@left など）か !コマンド。省くと小窓で選ぶ")
     p.set_defaults(fn=cmd_place)
+
+    p = sub.add_parser("stack", help="同じ位置に重なった窓（層）を、次・前へ切り替える（list なら小窓で選ぶ）")
+    p.add_argument("-m", "--monitor", metavar="画面", help=MONITOR_HELP)
+    p.add_argument("n", nargs="?", default="0", help="タイルの番号（0 は前面の窓のいるタイル）")
+    p.add_argument("action", nargs="?", default="next", choices=["next", "prev", "list"], help="next（既定）・prev・list（小窓で選ぶ）")
+    p.set_defaults(fn=cmd_stack)
 
     p = sub.add_parser("pick", help="窓の一覧を小さく出して選び、前面に出す（j/k・矢印・Enter）")
     p.add_argument("--id", action="store_true", help="前面に出さず、選んだ窓の ID だけを表示")
