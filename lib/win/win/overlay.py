@@ -219,12 +219,18 @@ def cmd_place(args):
 def cmd_stack(args):
     """同じ位置に重なった窓（層）を、次・前へ切り替える。list なら小窓で選ぶ。"""
     wc = WindowCalls()
+    words = [x for x in (args.n, args.action) if x is not None]          # win stack next 2 も win stack 2 next も受け付ける
+    acts = [x for x in words if x in ("next", "prev", "list")]
+    nums = [x for x in words if x not in ("next", "prev", "list")]
+    if len(acts) > 1 or len(nums) > 1:
+        raise WinError("書式: win stack [next|prev|list] [タイルの番号]（番号は 0 なら前面の窓のいるタイル）")
+    action = acts[0] if acts else "next"
     try:
-        n = int(args.n)
+        n = int(nums[0]) if nums else 0
     except ValueError:
-        raise WinError(f"タイルの番号か 0（前面の窓のいるタイル）を指定してください: {args.n}")
-    if args.action in ("next", "prev"):
-        st, w = cycle_stack(wc, n, 1 if args.action == "next" else -1)
+        raise WinError(f"タイルの番号か 0（前面の窓のいるタイル）を指定してください: {nums[0]}")
+    if action in ("next", "prev"):
+        st, w = cycle_stack(wc, n, 1 if action == "next" else -1)
         k = [x["id"] for x in st["layers"]].index(w["id"]) + 1
         print(f"タイル {st['index']}: 層 {k}/{len(st['layers'])}  {describe_window(w)}")
         return 0

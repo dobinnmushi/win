@@ -134,8 +134,8 @@ def build_parser():
 
     p = sub.add_parser("stack", help="同じ位置に重なった窓（層）を、次・前へ切り替える（list なら小窓で選ぶ）")
     p.add_argument("-m", "--monitor", metavar="画面", help=MONITOR_HELP)
-    p.add_argument("n", nargs="?", default="0", help="タイルの番号（0 は前面の窓のいるタイル）")
-    p.add_argument("action", nargs="?", default="next", choices=["next", "prev", "list"], help="next（既定）・prev・list（小窓で選ぶ）")
+    p.add_argument("n", nargs="?", default=None, help="タイルの番号（0 は前面の窓のいるタイル）、または動作。どちらの順でもよい")
+    p.add_argument("action", nargs="?", default=None, help="next（既定）・prev・list（小窓で選ぶ）、またはタイルの番号")
     p.set_defaults(fn=cmd_stack)
 
     p = sub.add_parser("group", help="窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）")

@@ -80,7 +80,7 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **認識**: `appstate.tile_stacks`。いまの並び（`current_tiles`）の各タイルについて、枠の 4 辺が `STACK_TOL`（8px）以内の、最小化されていない窓を層にする。手前の層は、重なり順がいちばん上のもの。すべてが他の窓に覆われて見えない重なりは、並びに現れないので含めない。
 - **巡回**: 層は ID の昇順で一巡する（Activate だけだと、上の 2 枚を行き来するだけになるため、順を固定する）。保存するものはない。
 - **下の層の扱い**: 覆うだけ（最小化しない）。タイルの逆算・窓の一覧は、すでに覆われた窓を無視するので、そのまま動く。
-- `win stack [N] [next|prev|list]`（N=0 は前面の窓のいるタイル）。`list` は `choose` の小窓（地図に各タイルの層の数、手前の層が先頭）。ショートカットの標準の割り当て先は `win-stack-next`・`win-stack-list`。拡張からは `stack(n)`（層の一覧）・`cycle(n, d)`（d 層ずらして前面へ）。
+- `win stack [next|prev|list] [N]`（N=0 は前面の窓のいるタイル。`win stack N next` の順でもよい。標準のショートカット項目が `win stack next` を呼ぶため、動作を先に書ける形にした — 最初は番号を先にしか書けず、キーを押しても何も起きなかった）。`list` は `choose` の小窓（地図に各タイルの層の数、手前の層が先頭）。ショートカットの標準のショートカット項目は `win-stack-next`（Super+Alt+T、変換＋T）・`win-stack-list`（Super+Alt+Y、変換＋Y）で、割り当て済み（実キーと keyd 経由の両方を実機で確認）。拡張からは `stack(n)`（層の一覧）・`cycle(n, d)`（d 層ずらして前面へ）。
 
 ## 4.1.1 窓のグループ（group）
 
