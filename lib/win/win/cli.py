@@ -8,7 +8,7 @@ from .common import WinError
 from .screen import resolve_monitor
 from .store import MONITOR_HELP
 from .placement import cmd_layout
-from .simple import cmd_focus, cmd_layouts, cmd_list, cmd_desktop, cmd_stats, cmd_send, cmd_undo
+from .simple import cmd_focus, cmd_layouts, cmd_list, cmd_desktop, cmd_stats, cmd_send, cmd_undo, cmd_shortcuts
 from .usage import record
 from .nav import cmd_nav
 from .sets import cmd_run, cmd_set
@@ -150,6 +150,13 @@ def build_parser():
                    help="list（既定）・new 名前 [窓…]・define 名前 窓の指定…・add 名前 [窓…]・remove [窓…]・delete 名前・next|prev|show|select [名前]・place 名前 [タイル]・from-stack [タイル] [名前]")
     p.add_argument("args", nargs="*", help="動作の引数（名前・窓の指定・タイルの番号）。名前を省くと、前面の窓の属するグループ")
     p.set_defaults(fn=cmd_group)
+
+    p = sub.add_parser("shortcuts", help="ショートカットの宣言的な設定（export で割り当てをファイルに書き出し、apply でファイルを GNOME に反映。list で一覧）")
+    p.add_argument("action", nargs="?", default="list", choices=["list", "export", "apply"], help="list（既定）・export・apply")
+    p.add_argument("file", nargs="?", help="shortcuts.toml のパス（apply の既定は ~/.config/win/shortcuts.toml。export は省くと標準出力）")
+    p.add_argument("-n", "--dry-run", action="store_true", help="apply: 反映せず、変える内容だけ表示")
+    p.add_argument("--prune", action="store_true", help="apply: ファイルにない win-* の項目を消す（それ以外は消さない）")
+    p.set_defaults(fn=cmd_shortcuts)
 
     p = sub.add_parser("send", help="前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ。next・prev・primary・モニタ名）")
     p.add_argument("target", nargs="?", default="next", help="next（既定）・prev・primary・モニタの接続名（eDP-1 など）")

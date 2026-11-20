@@ -372,7 +372,8 @@ def run_config(page="shortcuts"):
                 g3.add(self.shortcut_row(slug, e["name"] or slug, e["command"], e["binding"], e["name"], e["command"],
                                          deletable=True, editable=True))
             box.append(g3)
-            box.append(self.henkan_group())                   # キー側からの索引（長いので、目的別のグループの後ろ）
+            if os.path.exists(KEYD_CONF):                      # keyd を使っていなければ、変換＋キーの案内は出さない
+                box.append(self.henkan_group())               # キー側からの索引（長いので、目的別のグループの後ろ）
 
         def henkan_group(self):
             """変換＋キーの一覧（どのキーに何が付いているか・空き）と、keyd を全キー分にする手順。"""

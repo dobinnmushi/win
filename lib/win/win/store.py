@@ -57,6 +57,7 @@ def toml_dumps(data, path=()):
 
 
 def write_toml(path, data):
+    path = os.path.realpath(path)                         # 設定がリンク（別のリポジトリのファイル）でも、リンクを壊さず、実体に書く
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -170,6 +171,8 @@ MON_OPT = ("opt", "--monitor", "画面", "基準のモニタ（primary・current
 
 SIGNATURES = {
     "here": ([("pos", "窓", "窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ", True), MON_OPT], "選んだ窓を今の窓と同じ位置・大きさにして前面へ"),
+    "shortcuts": ([("pos", "動作", "list（既定）・export・apply", True), ("pos", "ファイル", "shortcuts.toml のパス", True), ("flag", "--dry-run", "apply: 反映せず、変える内容だけ表示"),
+                   ("flag", "--prune", "apply: ファイルにない win-* の項目を消す")], "ショートカットの宣言的な設定（export・apply）"),
     "send": ([("pos", "送り先", "next（既定）・prev・primary・モニタの接続名", True), WIN_OPT], "前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ）"),
     "undo": ([("pos", "対象", "list で記録の一覧。省くと直前の操作を戻す", True)], "直前の操作（layout・place・here・group・set・send）を元に戻す"),
     "stats": ([("pos", "対象", "日数（既定 30）・on・off・reset・path", True)], "使用の集計。on・off で記録を入れ・切り、reset で消す"),

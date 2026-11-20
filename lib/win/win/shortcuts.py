@@ -3,11 +3,14 @@
 import gi
 import glob
 import hashlib
+import json
 import os
 import re
 import sys
 from gi.repository import GLib
 from gi.repository import Gio
+
+from .common import WinError
 
 
 
@@ -119,6 +122,86 @@ def kb_remove(slug):
     Gio.Settings.sync()
 
 
+# ---------------------------------------------------------------- 宣言的なショートカット設定（shortcuts.toml）
+
+SHORTCUTS_FILE = os.environ.get("WIN_SHORTCUTS") or os.path.expanduser("~/.config/win/shortcuts.toml")
+
+
+def installed_bin():
+    """導入した win の起動役のパス（ショートカットから呼ぶ実体）。"""
+    p = os.path.expanduser("~/.local/bin/win")
+    return p if os.path.exists(p) else WIN_BIN
+
+
+def portable_command(cmd):
+    """win の起動役で始まるコマンドを、導入先に依存しない `win …` に直す（ほかのコマンドはそのまま）。"""
+    for b in {WIN_BIN, installed_bin(), os.path.expanduser("~/.local/bin/win")}:
+        if cmd == b or cmd.startswith(b + " "):
+            return "win" + cmd[len(b):]
+    return cmd
+
+
+def resolved_command(cmd):
+    """`win …` を、導入した win の実体のパスにする。"""
+    return installed_bin() + cmd[3:] if cmd == "win" or cmd.startswith("win ") else cmd
+
+
+def _toml_str(s):
+    return json.dumps(s, ensure_ascii=False)        # JSON の文字列は、TOML の基本文字列としてそのまま読める
+
+
+def export_shortcuts():
+    """いまの GNOME のカスタムショートカットすべてを、shortcuts.toml の文字列にする（slug の順）。"""
+    out = ["# win のショートカット（GNOME のカスタムショートカット）。`win shortcuts apply` で GNOME に反映する。",
+           "# command の先頭の `win` は、反映のとき、導入した win の実体に置き換わる。", ""]
+    for e in sorted(kb_list(), key=lambda e: e["slug"]):
+        out += ["[[shortcut]]", f"slug = {_toml_str(e['slug'])}", f"name = {_toml_str(e['name'])}",
+                f"binding = {_toml_str(e['binding'])}", f"command = {_toml_str(portable_command(e['command']))}", ""]
+    return "\n".join(out)
+
+
+def apply_shortcuts(path=None, dry_run=False, prune=False):
+    """shortcuts.toml を GNOME のカスタムショートカットに反映する。何度実行してもよい。変えた内容の説明のリストを返す。
+    prune なら、ファイルにない win-* の項目を消す（それ以外の項目は、消さない）。dry_run なら、反映せずに説明だけ返す。"""
+    import tomllib
+    path = path or SHORTCUTS_FILE
+    try:
+        with open(path, "rb") as f:
+            entries = tomllib.load(f).get("shortcut", [])
+    except FileNotFoundError:
+        raise WinError(f"ショートカットの設定がありません: {path}（作るには win shortcuts export）")
+    except tomllib.TOMLDecodeError as e:
+        raise WinError(f"ショートカットの設定を読めません: {path}: {e}")
+    have = {e["slug"]: e for e in kb_list()}
+    changes, seen = [], set()
+    for i, e in enumerate(entries, 1):
+        slug = e.get("slug")
+        if not slug or not e.get("binding") or not e.get("command"):
+            raise WinError(f"{i} 番目の項目に slug・binding・command が要ります: {e}")
+        if slug in seen:
+            raise WinError(f"slug が重複しています: {slug}")
+        seen.add(slug)
+        want = {"name": e.get("name") or slug, "binding": e["binding"], "command": resolved_command(e["command"])}
+        cur = have.get(slug)
+        if cur is None:
+            changes.append(f"追加: {slug}  {want['binding']}  {portable_command(want['command'])}")
+        else:
+            diff = [k for k in ("binding", "command", "name") if cur[k] != want[k]]
+            if not diff:
+                continue
+            changes.append(f"更新: {slug}  " + "・".join(f"{k}: {cur[k]!r} → {want[k]!r}" if k != "command" else
+                                                         f"command: {portable_command(cur[k])!r} → {portable_command(want[k])!r}" for k in diff))
+        if not dry_run:
+            kb_set(slug, name=want["name"], command=want["command"], binding=want["binding"])
+    if prune:
+        for slug in have:
+            if slug.startswith("win-") and slug not in seen:
+                changes.append(f"削除: {slug}")
+                if not dry_run:
+                    kb_remove(slug)
+    return changes
+
+
 def _gtk():
     gi.require_version("Gtk", "4.0")
     gi.require_version("Gdk", "4.0")
@@ -165,7 +248,7 @@ def accel_id(accel):
 
 # 変換＋キー: keyd（/etc/keyd/default.conf）の [win] レイヤーが、変換を押しながらのキーを Super+Alt+キー にする。
 # GNOME 側は Super+Alt+キー のショートカットとして登録するので、keyd さえ全キー分あれば、あとは sudo なしで付け外しできる。
-KEYD_CONF = "/etc/keyd/default.conf"
+KEYD_CONF = os.environ.get("WIN_KEYD_CONF") or "/etc/keyd/default.conf"          # keyd がなければ、変換＋キーの案内は出さず、キーは Super+Alt+文字 と表示する
 
 
 KEYD_GENERATED = os.path.expanduser("~/.config/win/keyd-default.conf")

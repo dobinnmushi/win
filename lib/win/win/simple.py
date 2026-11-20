@@ -131,6 +131,30 @@ def cmd_stats(args):
     return 0
 
 
+def cmd_shortcuts(args):
+    """ショートカットの宣言的な設定。export（いまの割り当てを shortcuts.toml の形で出す）・apply（ファイルを GNOME に反映）・list。"""
+    from .shortcuts import SHORTCUTS_FILE, apply_shortcuts, export_shortcuts, kb_list, portable_command
+    act, path = args.action, args.file
+    if act == "export":
+        text = export_shortcuts()
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            print(f"書き出しました: {path}（{text.count('[[shortcut]]')} 件）")
+        else:
+            print(text)
+        return 0
+    if act == "apply":
+        changes = apply_shortcuts(path, dry_run=args.dry_run, prune=args.prune)
+        for c in changes:
+            print(("（反映しない）" if args.dry_run else "") + c)
+        print(f"{'変更の予定' if args.dry_run else '変更'}: {len(changes)} 件（ファイル: {path or SHORTCUTS_FILE}）")
+        return 0
+    for e in kb_list():
+        print(f"{e['binding']:28s} {portable_command(e['command'])}")
+    return 0
+
+
 def cmd_send(args):
     """前面の窓（-w で指定した窓）を、別のモニタへ送る。モニタの作業領域に対する位置と大きさの割合を保つ（最大化の窓は、最大化のまま）。"""
     wc = WindowCalls()
