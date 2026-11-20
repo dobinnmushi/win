@@ -16,6 +16,13 @@ win undo                          # 直前の配置の前の状態に戻す
 **Ubuntu 26.04（GNOME 50.1・Wayland）、2 モニタ、日本語キーボード**でだけ、開発・確認しています。
 ほかの GNOME やディストリビューションは未確認です（報告を歓迎します）。画面・メッセージ・`--help` は日本語のみです。
 
+<p align="center">
+  <img src="docs/images/layout-dialog.png" alt="型を選ぶ小窓（矢印キーでモニタを切り替え）" width="48%">
+  <img src="docs/images/config-shortcuts.png" alt="設定の窓（ショートカットのページ）" width="48%">
+</p>
+
+*左: `win layout`（型をキーボードで選ぶ）。右: `win config`。*
+
 ## 機能
 
 | コマンド | 内容 |
@@ -43,7 +50,7 @@ win undo                          # 直前の配置の前の状態に戻す
 - GNOME Shell と、拡張 **[Window Calls](https://extensions.gnome.org/extension/4724/window-calls/)**（入れて、有効にする。これが無いと win は動きません）。
 - Python 3.11 以上、PyGObject、GTK 4、libadwaita。Ubuntu なら `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`。
 - 任意: `win desktop` を使うなら、`extension/` の小さな Shell 拡張（`./install.sh --extension`。有効にして、一度ログインし直す）。
-- 任意: `firefox`・`ptyxis`・`nvim`（Firefox のタブや端末の作業ディレクトリの保存、設定画面から開くエディタ）。
+- 任意: `firefox`・`ptyxis`・`nvim`（Firefox のタブや端末の作業ディレクトリの保存。設定画面から拡張のソースを開く操作は、`ptyxis` と `nvim` の両方が要ります）。
 
 ```sh
 git clone https://github.com/dobinnmushi/win.git

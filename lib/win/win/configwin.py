@@ -4,6 +4,7 @@ import gi
 import hashlib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -508,6 +509,9 @@ def run_config(page="shortcuts"):
 
         def open_ext_source(self, path, line):
             if not path:
+                return
+            if not (shutil.which("ptyxis") and shutil.which("nvim")):                  # 端末とエディタは、この 2 つだけに対応している
+                self.toast("拡張のソースを開くには、ptyxis と nvim が要ります。ファイルは " + path + " にあります")
                 return
             subprocess.Popen(["ptyxis", "--new-window", "-d", os.path.dirname(path), "--", "nvim", f"+{line or 1}", path],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

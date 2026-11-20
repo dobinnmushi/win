@@ -10,9 +10,11 @@ GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道�
 bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
 lib/win/win/            本体（27 のモジュール）
 tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・helper_test.py（拡張の D-Bus の約束の試験）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
-docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）
-extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と install.sh
-~/.config/win/          利用者の設定: commands.toml・sets.toml・layouts.toml（任意）・ext/（拡張の Python）
+docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）・publishing.md（公開と個人設定の切り分けの検討）・images/（README の画像）
+presets/                標準のショートカットの一式（super-alt.toml。`win shortcuts apply` で反映）
+README.md / README.ja.md・install.sh / uninstall.sh・LICENSE
+extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と、その導入の install.sh
+~/.config/win/          利用者の設定（すべて任意）: shortcuts.toml・commands.toml・sets.toml・apps.toml・layouts.toml・ext/（拡張の Python）。リンクでもよい
 ```
 
 `~/.local/bin/win` は `bin/win` へのリンク。子プロセス（小窓）も `WIN_BIN`（この起動役）で起こす。
@@ -24,7 +26,7 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 | 基礎 | `common` | 定数・標準ライブラリの読み込み・`WinError` |
 |  | `screen` | `Screen`（基準のモニタ）・作業領域・設定（layouts.toml）の読み込み・D-Bus で画面情報 |
 |  | `layouts` | 型の式（full / v(...) / h(...)・略記）の解析とタイルの計算 |
-|  | `shortcuts` | GNOME のカスタムショートカット（dconf）の読み書き・標準の操作の一覧 |
+|  | `shortcuts` | GNOME のカスタムショートカット（dconf）の読み書き・shortcuts.toml の書き出し/反映・標準の操作の一覧（既定のキーは持たない） |
 |  | `dbus` | Window Calls の D-Bus・窓の一覧・窓の指定（`@left`・`@slot:N` など） |
 |  | `desktop` | デスクトップ（ワークスペース）の取得・切り替え（拡張 win-helper@local の D-Bus を呼ぶ） |
 |  | `usage` | 使用の記録（コマンド名と、キー経由か手入力かだけ）と集計 |

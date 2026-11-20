@@ -17,6 +17,13 @@ Developed and tested only on **Ubuntu 26.04 (GNOME 50.1, Wayland)** with two mon
 Other GNOME versions and distributions may work but are untested; reports are welcome.
 **The user interface (dialogs, messages, `--help`) is in Japanese only.**
 
+<p align="center">
+  <img src="docs/images/layout-dialog.png" alt="The layout picker: choose a layout, switch monitor with the arrow keys" width="48%">
+  <img src="docs/images/config-shortcuts.png" alt="The settings window, shortcuts page" width="48%">
+</p>
+
+*Left: `win layout` (pick a layout with the keyboard). Right: `win config`. The screenshots show the Japanese interface.*
+
 ## Features
 
 | Command | What it does |
@@ -44,7 +51,7 @@ Requirements:
 - GNOME Shell with the extension **[Window Calls](https://extensions.gnome.org/extension/4724/window-calls/)** installed and enabled (win cannot work without it).
 - Python 3.11 or newer, PyGObject, GTK 4 and libadwaita. On Ubuntu: `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`.
 - Optional, for `win desktop`: the small Shell extension in `extension/` (`./install.sh --extension`, then enable it and log out and in once).
-- Optional: `firefox`, `ptyxis`, `nvim` for the features that use them (saving Firefox tabs and terminal directories; the editor window opened from the settings).
+- Optional: `firefox`, `ptyxis`, `nvim` for the features that use them (saving Firefox tabs and terminal directories; opening an extension's source from the settings window, which needs both `ptyxis` and `nvim`).
 
 ```sh
 git clone https://github.com/dobinnmushi/win.git
