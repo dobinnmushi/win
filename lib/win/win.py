@@ -1379,6 +1379,9 @@ def run_tilepick():
                 self.entry.set_placeholder_text(m.get("placeholder") or TILE_PLACEHOLDER)
                 self.hint.set_text(m.get("hint") or TILE_HINT)
                 st["windows"] = m["windows"]
+                st["movable"] = bool(m.get("movable"))        # 左右矢印で、置き先のタイルを動かせる（win here）
+                if m.get("mon") is not None:
+                    st["mon"] = m["mon"]
                 if "apps" in m:
                     st["apps"] = m["apps"]
                 self.set_tile(m)
@@ -1461,6 +1464,9 @@ def run_tilepick():
                 elif name in ("Left", "Right") and st["stage"] == "layout" and self.multi_mon() \
                         and not (state_mask & ~Gdk.ModifierType.LOCK_MASK):
                     self.move_mon(1 if name == "Right" else -1)
+                elif name in ("Left", "Right") and st["stage"] == "tile" and st.get("movable") \
+                        and not (state_mask & ~Gdk.ModifierType.LOCK_MASK):
+                    self.reply({"act": "target", "dir": 1 if name == "Right" else -1})
                 elif name in ("Return", "KP_Enter"):
                     self.choose(False)
                 elif name in ("Tab", "ISO_Left_Tab"):
@@ -5048,7 +5054,7 @@ def run_config(page="shortcuts"):
 
 # ---------------------------------------------------------------- いまの窓と同じ形にする（win here）
 
-HERE_HINT = "↑↓ 選択 ・ Enter 決定（この窓と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる"
+HERE_HINT = "↑↓ 選択 ・ ←→ 置き先を動かす ・ Enter 決定（置き先と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる"
 
 
 def window_row_title(w, d):
@@ -5098,27 +5104,86 @@ def cmd_here(args):
         if notice:
             print(notice, file=sys.stderr)
         return 0
-    return gui_here(wc, cur, rect, maximized, ws, cands)
+    return gui_here(wc, cur, rect, maximized, ws)
 
 
-def gui_here(wc, cur, rect, maximized, workspace, cands):
-    """絞り込みの小窓で窓（先頭 ! でアプリ）を選び、いまの窓と同じ形にして前面に出す。"""
+def here_targets(wc, front, add_front):
+    """置き先の候補（いまの基準モニタ上のタイル）[{"id", "norm"（作業領域に対する割合の x, y, 幅, 高さ）, "label", "c"（画面での中心）}] と、
+    前面の窓のタイルの添字（なければ None）。add_front: 前面の窓がタイルの中になければ、その窓の場所を候補に足す。
+    タイルが 1 枚もないモニタは、作業領域全体を「空き」の 1 枚として返す。"""
+    cfg = load_config()
+    ax, ay, aw, ah = work_area(cfg)
+    cur = current_tiles(wc, cfg)
+    targets = []
+    if cur["tree"] is not None:
+        box = {it[0]: it[1:5] for it in cur["items"]}
+        for i in tile_order(cur, cfg)[1]:
+            x0, y0, x1, y1 = box[i]
+            targets.append({"id": i, "norm": (x0, y0, x1 - x0, y1 - y0), "label": (cur["by_id"][i].get("wm_class") or "")[:14]})
+    index = next((n for n, t in enumerate(targets) if t["id"] == front["id"]), None)
+    if index is None and add_front:                      # 並びの外（最大化など）: その窓の場所を 1 枚として足す
+        d = wc.details(front["id"])
+        bx, by = max(0.0, (d["x"] - ax) / aw), max(0.0, (d["y"] - ay) / ah)
+        targets.append({"id": front["id"], "norm": (bx, by, min(1.0 - bx, d["width"] / aw), min(1.0 - by, d["height"] / ah)),
+                        "label": "ここ"})
+        index = len(targets) - 1
+    if not targets:
+        targets = [{"id": None, "norm": (0.0, 0.0, 1.0, 1.0), "label": "空き"}]
+    for t in targets:
+        x, y, w, h = t["norm"]
+        t["c"] = (ax + (x + w / 2) * aw, ay + (y + h / 2) * ah)
+    return targets, index
+
+
+def here_move(wc, front, targets, index, d):
+    """置き先を、左（d=-1）・右（d=1）の隣のタイルへ（実際の位置で決める）。端を越えるときは、その向きの隣のモニタへ
+    （基準のモニタを切り替えて、並びを逆算し直す）。動けなければ None。戻り値: (新しい候補, 新しい添字)。"""
+    cx, cy = targets[index]["c"]
+    side = [(abs(t["c"][0] - cx) + abs(t["c"][1] - cy), n) for n, t in enumerate(targets)
+            if n != index and (t["c"][0] - cx) * d > 0]
+    if side:
+        return targets, min(side)[1]
+    mons, cur = monitors_for_preview(load_config())
+    mx, my, mw, mh = mons[cur]["rect"]
+    nxt = [(abs(m["rect"][0] + m["rect"][2] / 2 - (mx + mw / 2)) + abs(m["rect"][1] + m["rect"][3] / 2 - (my + mh / 2)) / 4, n)
+           for n, m in enumerate(mons) if n != cur and (m["rect"][0] + m["rect"][2] / 2 - (mx + mw / 2)) * d > 0]
+    if not nxt:
+        return None
+    resolve_monitor(mons[min(nxt)[1]]["name"])
     ax, ay, aw, ah = work_area(load_config())
-    box = [max(0.0, (rect[0] - ax) / aw), max(0.0, (rect[1] - ay) / ah)]
-    norm = [(box[0], box[1], min(1.0 - box[0], rect[2] / aw), min(1.0 - box[1], rect[3] / ah))]
-    rows = [{"id": w["id"], "cls": w.get("wm_class") or "", "title": window_row_title(w, wc.details(w["id"])),
-             "icon": icon_for_class(w.get("wm_class"))}
-            for w in cands]
-    by_id = {w["id"]: w for w in cands}
+    new, _ = here_targets(wc, front, False)
+    # 入ってくる側の端に近く、いまの高さに近いタイルへ
+    key = lambda t: ((t["c"][0] - ax) if d > 0 else (ax + aw - t["c"][0])) + abs(t["c"][1] - cy) / 2
+    return new, min(range(len(new)), key=lambda n: key(new[n]))
+
+
+def gui_here(wc, cur, rect, maximized, workspace):
+    """絞り込みの小窓で窓（先頭 ! でアプリ）を選び、置き先のタイルと同じ形にして前面に出す。置き先は、はじめは前面の窓のタイル。
+    左右矢印で隣のタイル（端を越えたら隣のモニタ）へ動かせる。"""
+    cfg = load_config()
+    targets, index = here_targets(wc, cur, True)
+    by_ws = {w["id"]: w for w in normal_windows(wc)}
     child = spawn_tilepick()
 
     def send(msg):
         child.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")
         child.stdin.flush()
 
+    def candidates():
+        tid = targets[index]["id"]
+        return [w for w in reversed(normal_windows(wc)) if w["id"] != tid]
+
     def tile(notice="", first=False):
-        msg = {"cmd": "tile", "index": 0, "n": 1, "layout": "", "title": "ここに持ってくる", "hint": HERE_HINT,
-               "rects": norm, "labels": [""], "windows": rows, "notice": notice}
+        cands = candidates()
+        mons, mon = monitors_for_preview(cfg)
+        t = targets[index]
+        title = "ここに持ってくる" if t["id"] == cur["id"] else (
+            "空いている場所に持ってくる" if t["id"] is None else f"タイル {index + 1}（{t['label']}）に持ってくる")
+        msg = {"cmd": "tile", "index": index, "n": len(targets), "layout": "", "title": title, "hint": HERE_HINT,
+               "rects": [t["norm"] for t in targets], "labels": [t["label"] if n != index else "" for n, t in enumerate(targets)],
+               "windows": [{"id": w["id"], "cls": w.get("wm_class") or "", "title": window_row_title(w, wc.details(w["id"])),
+                            "icon": icon_for_class(w.get("wm_class"))} for w in cands],
+               "notice": notice, "movable": True, "mon": mon}
         if first:
             msg["apps"] = list_apps()
         return msg
@@ -5135,8 +5200,15 @@ def gui_here(wc, cur, rect, maximized, workspace, cands):
                 res = {"act": "cancel"}
             act = res.get("act")
             try:
+                if act == "target":
+                    moved = here_move(wc, cur, targets, index, res.get("dir", 0))
+                    if moved:
+                        targets, index = moved
+                    send(tile("" if moved else "その向きに置き先はありません"))
+                    wc.simple("Activate", wid)
+                    continue
                 if act == "win":
-                    chosen = by_id.get(res["id"])
+                    chosen = next((w for w in candidates() if w["id"] == res["id"]), None)
                     if chosen is None:
                         raise WinError("その窓はもう閉じられました")
                 elif act in ("app", "cmd"):
@@ -5159,7 +5231,16 @@ def gui_here(wc, cur, rect, maximized, workspace, cands):
         except subprocess.TimeoutExpired:
             child.kill()
     time.sleep(0.2)                          # 小窓が閉じて、フォーカスが戻るのを待ってから動かす
-    notice = bring_here(wc, chosen, rect, maximized, workspace)
+    tid = targets[index]["id"]
+    if tid is None:                          # 空いているモニタ: 作業領域いっぱいに置く
+        ax, ay, aw, ah = work_area(cfg)
+        dest, dmax, dws = (ax, ay, aw, ah), False, workspace
+    else:
+        d = wc.details(tid)
+        dest = (d["x"], d["y"], d["width"], d["height"])
+        dmax = bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
+        dws = (by_ws.get(tid) or cur).get("workspace", workspace)
+    notice = bring_here(wc, chosen, dest, dmax, dws)
     if notice:
         print(notice, file=sys.stderr)
     return 0
