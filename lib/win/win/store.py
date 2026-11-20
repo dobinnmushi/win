@@ -16,6 +16,7 @@ from .shortcuts import WIN_BIN, command_slug, kb_list, kb_remove, kb_set, set_sl
 COMMANDS = os.environ.get("WIN_COMMANDS") or os.path.expanduser("~/.config/win/commands.toml")      # 環境変数は試験用の差し替え
 
 
+APPS = os.environ.get("WIN_APPS") or os.path.join(os.path.dirname(COMMANDS), "apps.toml")        # アプリごとの設定（new_window）。なくてもよい
 SETS = os.environ.get("WIN_SETS") or os.path.join(os.path.dirname(COMMANDS), "sets.toml")
 
 
@@ -63,6 +64,11 @@ def write_toml(path, data):
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(TOML_HEADER + "\n" + toml_dumps(data) + "\n")
     os.replace(tmp, path)
+
+
+def load_apps():
+    """アプリごとの設定 {起動コマンド名: {"new_window": [引数…]}}（apps.toml の [app.コマンド名]）。なければ空。"""
+    return _load_table(APPS, "app")
 
 
 def _load_table(path, key):

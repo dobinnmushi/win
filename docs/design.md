@@ -122,6 +122,8 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 
 個人の使い方の想定とキー表は、本体ではなく個人設定（`win-config` の `docs/usage.md`）に置く。
 
+- **アプリごとの設定（`apps.toml`）**: 起動のとき、引数なしだと新しい窓が出ないアプリに足す引数を、`~/.config/win/apps.toml`（`WIN_APPS` で差し替え可）の `[app.起動コマンド名]` の `new_window = ["--new-window"]` で指定できる。組み込みの既定（ptyxis・gnome-text-editor・nautilus・Chrome）より優先し、空のリストなら足さない。Firefox のタブや端末の作業ディレクトリの保存は、アプリごとの専用コード（`appstate.py`）で、表にはしない。
+
 ## 4.5 新しい機能
 
 - **アプリへ飛ぶ**: `win focus 'クラス?'`（`クラス?コマンド` も可）。窓があれば前面へ、すでにそのアプリにいれば次の窓へ（ID の昇順で一巡）、なければ起動する。`?` のない従来の `win focus` は変えていない（専用の自作拡張 `raise-claude@local` の置き換えになる。拡張は消していない）。

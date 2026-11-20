@@ -15,7 +15,7 @@ from .screen import default_screen, find_screen, load_config
 from .layouts import compute_rects, resolve_layout
 from .shortcuts import WIN_BIN
 from .dbus import WindowCalls, find_windows, focused, is_multi, normal_windows, usable_windows
-from .store import launch_for_class
+from .store import launch_for_class, load_apps
 
 
 def place(wc, wid, rect):
@@ -89,10 +89,21 @@ def wait_new_window(wc, before, timeout, what):
     raise WinError(f"{timeout} 秒待っても新しい窓が現れませんでした: {what}")
 
 
-# 引数なしで起動すると、起動中のとき新しい窓を作らず既存の窓を前面に出すだけのアプリ（2 回目の起動で窓が増えないのを実機で確認したもの）
+# 引数なしで起動すると、起動中のとき新しい窓を作らず既存の窓を前面に出すだけのアプリ（2 回目の起動で窓が増えないのを実機で確認したもの）。
+# ここは組み込みの既定。利用者は apps.toml の [app.コマンド名] new_window = ["--new-window"] で足す・上書きできる
 NEW_WINDOW_APPS = {"ptyxis": ["--new-window"], "gnome-text-editor": ["--new-window"], "nautilus": ["--new-window"],
                    # Chrome は --new-window だけだと窓が出ない（URL があると出る。chrome://newtab でも出ないのを確認）ので about:blank を開く
                    "google-chrome-stable": ["--new-window", "about:blank"], "google-chrome": ["--new-window", "about:blank"]}
+
+
+def new_window_args(name):
+    """起動コマンド名に、新しい窓を作るために足す引数。apps.toml の指定が、組み込みの既定より優先する。"""
+    mine = load_apps().get(name, {}).get("new_window")
+    if mine is not None:
+        if not isinstance(mine, list) or not all(isinstance(a, str) for a in mine):
+            raise WinError(f"apps.toml の [app.{name}] new_window は、文字列のリストにしてください")
+        return list(mine)
+    return list(NEW_WINDOW_APPS.get(name, []))
 
 
 def launch(wc, cmdline, timeout=20):
@@ -102,8 +113,8 @@ def launch(wc, cmdline, timeout=20):
         raise WinError("起動するコマンドが空です")
     if argv[0] == "win":                                  # PATH に win が無い環境（ショートカットなど）でも動くように
         argv = [sys.executable, WIN_BIN] + argv[1:]
-    if len(argv) == 1 and os.path.basename(argv[0]) in NEW_WINDOW_APPS:    # 引数なしは、起動中なら既存の窓を前面にするだけで窓が増えない
-        argv += NEW_WINDOW_APPS[os.path.basename(argv[0])]
+    if len(argv) == 1:                                    # 引数なしは、起動中なら既存の窓を前面にするだけで窓が増えない
+        argv += new_window_args(os.path.basename(argv[0]))
     before = {w["id"] for w in normal_windows(wc)}
     try:
         subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
