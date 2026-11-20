@@ -92,6 +92,6 @@ with ui.dialog(title="置き先を選ぶ", hint="←→ で置き先を動かす
 - `vim`・`numbers`: 入力欄のない一覧のキー（j/k・g/G・l・h/q・1〜9）と行番号（`win pick`）。
 - 行がないまま Tab → `item` が None の `select`（via="tab"）。`!` で起動したとき → `launched`（window と、その起動コマンド `text`）。
 
-**確認（実機）**: `place`・`here`（左右・モニタ越え・`!calculator`）、`set`（地図・左右・適用）、`pick --id`（j/k・数字・q）、`layout`（型の選択・式 `1,2`・左右・`lr` → Ctrl+S → `!calculator`・再現コマンド）、`layout lr -i`（Ctrl+S・Ctrl+B）、拡張の `choose`・`confirm`・`ask`・`pick_tile`・`Dialog`・`pick()`。
+**確認（実機）**: `place`・`here`（左右・モニタ越え・`!calculator`）、`set`（地図・左右・適用）、`pick --id`（j/k・数字・q）、`layout`（型の選択・式 `1,2`・左右・`lr` → Ctrl+S → `!calculator`・再現コマンド・Tab の 2 経路）、`layout lr -i`（Ctrl+S・Ctrl+B）、拡張の `choose`・`confirm`・`ask`・`pick_tile`・`Dialog`・`pick()`。
 
-**未確認**: `layout` の Tab（残りを自動）、端末版の対話の一覧（`line_from_picker`）、`keep_selection`。
+**未確認**: 端末版の対話の一覧（`line_from_picker`）、`keep_selection`。`layout` の Tab（型の選択画面での自動配置と、タイルごとの選択での「決めて残りを自動」）は、実機で確認した（試験前に全窓の位置を記録し、枠の基準の `place_settled` で復元）。

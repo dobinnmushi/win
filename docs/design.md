@@ -94,7 +94,6 @@ docs/                   design.md（この文書）・interactive-design.md（�
 
 ## 7. 既知の課題
 
-- `win layout` の Tab（決めて残りを前面の窓から自動）の経路は、実機では動かしていない（窓を動かすため）。
 - 端末版の対話（`layout -i -t`）が使う `line_from_picker` は、`pick_rows` に切り替えたが、実機では動かしていない。
 - 遅延インポート（約 20 か所）を減らすには、使う部品（窓の可視判定・タイル逆算・小窓の起動）を下の層へ移す。
 - `keep_selection`（`Dialog`）は、実機で確かめていない。
