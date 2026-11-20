@@ -2585,17 +2585,27 @@ MK_ENTRY = MK_SCHEMA + ".custom-keybinding"
 MK_BASE = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/"
 WIN_BIN = os.path.abspath(sys.argv[0])  # 起動役（~/.local/bin/win）。子のプロセスもこれで起こし、解析結果のキャッシュを使わせる
 
-# win の標準の操作（slug, 表示名, 引数, 既定のキー）。slug は dconf の項目名
+# ショートカット画面のグループ（目的別。実装の種類 — 組み込み・拡張・コマンド・セット — では分けない）
+G_MOVE, G_ARRANGE, G_SET, G_CMD, G_OTHER = "窓を選ぶ・移る", "窓を並べる・置く", "保存した並び（セット）", "コマンド", "その他の操作"
+ACTION_GROUPS = [
+    (G_MOVE, "窓を選んで前面に出す、フォーカスを移す操作です。"),
+    (G_ARRANGE, "窓を型で並べる、置き先に重ねる操作です。"),
+    (G_SET, "「セット」ページで保存した窓の並びを呼びます。"),
+    (G_CMD, "「コマンド」ページで作ったコマンドを呼びます。"),
+    (G_OTHER, "上のどれにも入らない、win の操作と拡張の命令です。"),
+]
+
+# win の標準の操作（slug, 表示名, 引数, 既定のキー, グループ）。slug は dconf の項目名
 WIN_ACTIONS = [
-    ("win-pick", "窓を選んで前面に出す", "pick", "<Super><Alt>p"),
-    ("win-prompt", "コマンドを入力して窓を操作", "prompt", "<Super><Alt>semicolon"),
-    ("win-layout", "型を選んで窓を並べる", "layout", "<Super><Alt>m"),
-    ("win-here", "選んだ窓を今の窓と同じ形にする", "here", "<Super><Alt>o"),
-    ("win-set", "保存した並び（セット）を選んで適用", "set", "<Super><Alt>s"),
-    ("win-nav-next", "次の窓へ（いまの並びの番号順）", "nav next", "<Super><Alt>j"),
-    ("win-nav-prev", "前の窓へ（いまの並びの番号順）", "nav prev", "<Super><Alt>k"),
-    *[(f"win-slot-{n}", f"{n} 番目のタイルの窓へ", f"focus @slot:{n}", f"<Super><Alt>{n}") for n in range(1, 10)],
-    ("win-config", "win の設定を開く", "config", "<Super><Alt>comma"),
+    ("win-pick", "窓を選んで前面に出す", "pick", "<Super><Alt>p", G_MOVE),
+    ("win-prompt", "コマンドを入力して窓を操作", "prompt", "<Super><Alt>semicolon", G_CMD),
+    ("win-layout", "型を選んで窓を並べる", "layout", "<Super><Alt>m", G_ARRANGE),
+    ("win-here", "選んだ窓を今の窓と同じ形にする", "here", "<Super><Alt>o", G_ARRANGE),
+    ("win-set", "保存した並び（セット）を選んで適用", "set", "<Super><Alt>s", G_SET),
+    ("win-nav-next", "次の窓へ（いまの並びの番号順）", "nav next", "<Super><Alt>j", G_MOVE),
+    ("win-nav-prev", "前の窓へ（いまの並びの番号順）", "nav prev", "<Super><Alt>k", G_MOVE),
+    *[(f"win-slot-{n}", f"{n} 番目のタイルの窓へ", f"focus @slot:{n}", f"<Super><Alt>{n}", G_MOVE) for n in range(1, 10)],
+    ("win-config", "win の設定を開く", "config", "<Super><Alt>comma", G_OTHER),
 ]
 
 
@@ -4226,7 +4236,7 @@ def run_config(page="shortcuts"):
             self.refresh()
 
         def shortcut_row(self, slug, title, subtitle, current, name, command, default=None, deletable=False,
-                         editable=False):
+                         editable=False, kind=None):
             row = plain(Adw.ActionRow, title=title, subtitle=subtitle)
             row.set_subtitle_lines(1)
             btns = [self.key_label(current),
@@ -4245,6 +4255,11 @@ def run_config(page="shortcuts"):
                 btns.append(self.icon_button("user-trash-symbolic", lambda: self.confirm(
                     "このショートカットを削除しますか？", f"「{title}」を削除します。", "削除",
                     lambda: (kb_remove(slug), self.toast("削除しました"), self.refresh())), "削除"))
+            if kind:                                      # 組み込み・拡張・コマンド・セットの別（小さな印）
+                chip = Gtk.Label(label=kind, valign=Gtk.Align.CENTER)
+                chip.add_css_class("caption")
+                chip.add_css_class("dim-label")
+                row.add_prefix(chip)
             row.add_suffix(self.suffix_box(*btns))
             return row
 
@@ -4256,48 +4271,47 @@ def run_config(page="shortcuts"):
                 "変更はすぐ保存され、反映まで数秒かかることがあります。"))
             intro.add_css_class("dim-label")
             box.append(intro)
-            box.append(self.henkan_group())
             kbs = {e["slug"]: e for e in kb_list()}
-            g1 = Adw.PreferencesGroup(title="win の操作", description="win の標準の命令です。")
-            for slug, label, args, default in WIN_ACTIONS:
+            rows = {g: [] for g, _ in ACTION_GROUPS}          # グループ → 行（目的別に並べる。種類は行の印で示す）
+            slot_rows = []
+            for slug, label, args, default, group in WIN_ACTIONS:
                 e = kbs.get(slug)
-                g1.add(self.shortcut_row(slug, label, f"win {args}", e["binding"] if e else "",
-                                         f"win {args}（{label}）", f"{WIN_BIN} {args}", default=default))
-            box.append(g1)
-            cmds = load_commands()
-            g2 = Adw.PreferencesGroup(title="登録したコマンド", description="「コマンド」ページで作ったコマンドに、キーを付けられます。")
-            for name, c in cmds.items():
+                row = self.shortcut_row(slug, label, f"win {args}", e["binding"] if e else "",
+                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", default=default, kind="組み込み")
+                (slot_rows if slug.startswith("win-slot-") else rows[group]).append(row)
+            if slot_rows:                                     # 1〜9 は 1 行にまとめ、開くと 9 個のキーを付けられる
+                bound = sum(1 for slug, *_ in WIN_ACTIONS if slug.startswith("win-slot-") and kbs.get(slug, {}).get("binding"))
+                exp = Adw.ExpanderRow(title="n 番目のタイルの窓へ（1〜9）", subtitle=f"9 個のうち {bound} 個にキーが付いています")
+                for r in slot_rows:
+                    exp.add_row(r)
+                rows[G_MOVE].append(exp)
+            for name, c in load_commands().items():
                 slug = command_slug(name)
                 e = kbs.get(slug)
-                g2.add(self.shortcut_row(slug, name, describe_command(c), e["binding"] if e else "",
-                                         f"win run: {name}", f"{WIN_BIN} run {shlex.quote(name)}"))
-            if not cmds:
-                g2.add(plain(Adw.ActionRow, title="（登録したコマンドはありません）"))
-            box.append(g2)
-            sets = load_sets()
-            gs = Adw.PreferencesGroup(title="セット", description="「セット」ページで保存した窓の並びに、キーを付けられます。")
-            for name, c in sets.items():
+                rows[G_CMD].append(self.shortcut_row(slug, name, describe_command(c), e["binding"] if e else "",
+                                                     f"win run: {name}", f"{WIN_BIN} run {shlex.quote(name)}", kind="コマンド"))
+            for name, c in load_sets().items():
                 slug = set_slug(name)
                 e = kbs.get(slug)
-                gs.add(self.shortcut_row(slug, name, set_summary(c), e["binding"] if e else "",
-                                         f"win set: {name}", f"{WIN_BIN} set {shlex.quote(name)}"))
-            if not sets:
-                gs.add(plain(Adw.ActionRow, title="（保存したセットはありません）"))
-            box.append(gs)
-            orphans = [e for slug, e in kbs.items() if slug.startswith("win-ext-") and slug not in {ext_slug(n) for n in EXT}]
-            if EXT or orphans:
-                gx = Adw.PreferencesGroup(title="拡張の命令", description="拡張（Python）の @command に、キーを付けられます。引数は省いた形で呼びます。")
-                for name, c in EXT.items():
-                    slug = ext_slug(name)
-                    e = kbs.get(slug)
-                    gx.add(self.shortcut_row(slug, name, c.summary, e["binding"] if e else "",
-                                             f"win: {name}", f"{WIN_BIN} {shlex.quote(name)}"))
-                for e in orphans:                         # 命令が消えた（名前が変わった）のに、キーだけ残っているもの
-                    row = self.shortcut_row(e["slug"], e["name"] or e["slug"], "⚠ この命令は拡張に見つかりません（消すか、拡張を直してください）",
-                                            e["binding"], e["name"], e["command"], deletable=True)
-                    row.add_css_class("warning")
-                    gx.add(row)
-                box.append(gx)
+                rows[G_SET].append(self.shortcut_row(slug, name, set_summary(c), e["binding"] if e else "",
+                                                     f"win set: {name}", f"{WIN_BIN} set {shlex.quote(name)}", kind="セット"))
+            for name, c in EXT.items():                       # 拡張の命令。@command(group=…) で、目的別のグループに入れられる
+                slug = ext_slug(name)
+                e = kbs.get(slug)
+                rows[c.group if c.group in rows else G_OTHER].append(
+                    self.shortcut_row(slug, name, c.summary, e["binding"] if e else "",
+                                      f"win: {name}", f"{WIN_BIN} {shlex.quote(name)}", kind="拡張"))
+            for e in [e for slug, e in kbs.items() if slug.startswith("win-ext-") and slug not in {ext_slug(n) for n in EXT}]:
+                row = self.shortcut_row(e["slug"], e["name"] or e["slug"], "⚠ この命令は拡張に見つかりません（消すか、拡張を直してください）",
+                                        e["binding"], e["name"], e["command"], deletable=True)   # 命令が消えた（名前が変わった）のに、キーだけ残っているもの
+                row.add_css_class("warning")
+                rows[G_OTHER].append(row)
+            for gname, desc in ACTION_GROUPS:
+                if rows[gname]:
+                    g = Adw.PreferencesGroup(title=gname, description=desc)
+                    for r in rows[gname]:
+                        g.add(r)
+                    box.append(g)
             own = {s for s, *_ in WIN_ACTIONS}
             g3 = Adw.PreferencesGroup(title="その他の自作ショートカット", description="win 以外で、自分で登録したものです。")
             g3.set_header_suffix(self.button("＋ 追加", lambda: self.shortcut_form(None)))
@@ -4307,6 +4321,7 @@ def run_config(page="shortcuts"):
                 g3.add(self.shortcut_row(slug, e["name"] or slug, e["command"], e["binding"], e["name"], e["command"],
                                          deletable=True, editable=True))
             box.append(g3)
+            box.append(self.henkan_group())                   # キー側からの索引（長いので、目的別のグループの後ろ）
 
         def henkan_group(self):
             """変換＋キーの一覧（どのキーに何が付いているか・空き）と、keyd を全キー分にする手順。"""
@@ -5687,6 +5702,7 @@ class ExtCommand:
 
     def __init__(self, fn, name):
         self.fn, self.name = fn, name
+        self.group = None                                 # ショートカット画面のグループ（@command(group=…)）
         try:
             self.sig = inspect.signature(fn, eval_str=True)
         except Exception:                                 # 注釈が評価できなければ、文字列のまま
@@ -5847,14 +5863,15 @@ def _default(p, cmd):
     return p.default
 
 
-def api_command(fn=None, *, name=None):
-    """関数を win の命令として登録する印（@command、または @command(name="別名")）。"""
+def api_command(fn=None, *, name=None, group=None):
+    """関数を win の命令として登録する印（@command、または @command(name="別名", group="グループ名")）。"""
     def register(f):
         n = name or f.__name__
         if n in builtin_commands():
             EXT_ERRORS.append((inspect.getsourcefile(f) or "?", f"「{n}」は win の組み込みの命令と同じ名前なので、使えません"))
         else:
             EXT[n] = ExtCommand(f, n)
+            EXT[n].group = group
         return f
     return register(fn) if fn is not None else register
 
@@ -5931,10 +5948,12 @@ class Window:
 @overload
 def command(fn: _F) -> _F: ...
 @overload
-def command(*, name: str | None = None) -> Callable[[_F], _F]: ...
-def command(fn=None, *, name=None):
+def command(*, name: str | None = None, group: str | None = None) -> Callable[[_F], _F]: ...
+def command(fn=None, *, name=None, group=None):
     \"\"\"関数を win の命令にする印。引数の型の注釈（Window・int・float・str・bool）で、打った語を変換する。
 
+    group を書くと、設定のショートカット画面でその目的別のグループに入る（"窓を選ぶ・移る"・"窓を並べる・置く"・
+    "保存した並び（セット）"・"コマンド"・"その他の操作"。省くと「その他の操作」）。
     Window の引数には、クラス・題名の一部、ID、@left・@prev などを打てる。既定値に sel("@left") と
     書くと、省いたときにその窓になる。bool の引数は --名前 で True。
     int | Window にすると、数字は整数（例 タイルの番号 → at(f"@slot:{n}")）、ほかは窓として受け取る。
