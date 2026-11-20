@@ -1,5 +1,6 @@
 """型による配置（win layout）。"""
 
+from concurrent.futures import ThreadPoolExecutor
 import itertools
 import math
 import os
@@ -241,14 +242,17 @@ def cmd_layout(args):
         me = focused(wc)["id"]
     except WinError:
         me = None
-    placed, results = [], []
-    for i, (r, p) in enumerate(zip(rects, plan), 1):
-        if p is None:
-            continue
-        w = launch(wc, p[1]) if p[0] == "run" else p[1]
-        place_settled(wc, w["id"], r)
-        placed.append(w)
-        results.append((w["id"], r, i))
+    placed, results, settling = [], [], []
+    with ThreadPoolExecutor(max_workers=max(1, n)) as pool:           # 置いたあとの定着待ち（窓ごとに 0.3 秒以上）は並行して行う
+        for i, (r, p) in enumerate(zip(rects, plan), 1):
+            if p is None:
+                continue
+            w = launch(wc, p[1]) if p[0] == "run" else p[1]           # 起動は 1 つずつ（新しい窓の見分けが混ざらないように）
+            settling.append(pool.submit(place_settled, wc, w["id"], r))
+            placed.append(w)
+            results.append((w["id"], r, i))
+        for f in settling:
+            f.result()
     raise_group(wc, placed, me)
     # 前面に出したあとに、アプリ自身が大きさを戻すことがある（Firefox で 5px 足りなくなった例）。ずれた窓は、もう一度置き直す
     launched = any(p is not None and p[0] == "run" for p in plan)
