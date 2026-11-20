@@ -12,7 +12,9 @@ Window Calls 拡張（window-calls@domandoman.xyz）の D-Bus を呼んで、
   win layout "v(1,h(1,1))" -i    型だけ作って、タイルごとに絞り込んで選ぶ小窓（文字で絞り込み・
                                  先頭 ! でアプリを新規起動・Tab で残りを自動・Ctrl+S 空ける・Ctrl+B 戻る）
   win layouts                    登録済みの型の一覧
-  win here                       選んだ窓（先頭 ! でアプリ）を、いまの窓と同じ位置・大きさにして前面へ
+  win here                       選んだ窓（先頭 ! でアプリ）を、いまの窓と同じ位置・大きさにして前面へ（place 0 と同じ）
+  win place 2 firefox            2 番目のタイルに Firefox を重ねる（窓を省くと小窓。←→ で置き先を動かせる）
+  win place free firefox         いちばん広い空きスペースに Firefox を置く
   win pick                       窓の一覧を小さく出し、j/k・矢印・Enter で選んで前面に出す
   win nav left|right|up|down     表に出ている窓の間で、その向きの窓にフォーカスを移す
   win prompt                     コマンドを 1 行打って窓を操作する小窓（Tab 補完・履歴つき）
@@ -1267,6 +1269,8 @@ def run_tilepick():
                 lab = Gtk.Label(label=f"{i + 1}" + (f"\n{label}" if label else ""), ellipsize=Pango.EllipsizeMode.END,
                                 max_width_chars=1, justify=Gtk.Justification.CENTER)
                 lab.add_css_class("tile-box")
+                if st.get("free") and i < len(st["free"]) and st["free"][i]:
+                    lab.add_css_class("free")
                 if i == cur:
                     lab.add_css_class("cur")
                 elif label:
@@ -1379,7 +1383,8 @@ def run_tilepick():
                 self.entry.set_placeholder_text(m.get("placeholder") or TILE_PLACEHOLDER)
                 self.hint.set_text(m.get("hint") or TILE_HINT)
                 st["windows"] = m["windows"]
-                st["movable"] = bool(m.get("movable"))        # 左右矢印で、置き先のタイルを動かせる（win here）
+                st["movable"] = bool(m.get("movable"))        # 左右矢印で、置き先のタイルを動かせる（win place）
+                st["free"] = m.get("free") or []              # 空きスペースのタイル（点線で描く）
                 if m.get("mon") is not None:
                     st["mon"] = m["mon"]
                 if "apps" in m:
@@ -1418,6 +1423,7 @@ def run_tilepick():
                 ".screen-box.cur { background: alpha(currentColor, .09); border: 2px solid alpha(@accent_bg_color, .9); }"
                 ".tile-box.cur { background: @accent_bg_color; color: @accent_fg_color; border-color: @accent_bg_color; }"
                 ".tile-box.done { background: alpha(currentColor, .12); }"
+                ".tile-box.free { border-style: dashed; }"
                 ".mode-chip { padding: 2px 10px; border-radius: 12px; background: alpha(currentColor, .12); font-size: 9pt; }")
             Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
                                                       Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -2016,7 +2022,7 @@ def cmd_nav(args):
 
 # ---------------------------------------------------------------- コマンド入力（win prompt）
 
-SUBCOMMANDS = [("here", "選んだ窓を今の窓と同じ位置・大きさにして前面へ"), ("focus", "窓を前面に出す"), ("nav", "上下左右の窓へ"), ("layout", "窓を分割配置する"),
+SUBCOMMANDS = [("here", "選んだ窓を今の窓と同じ位置・大きさにして前面へ"), ("place", "選んだ窓を、置き先（番号のタイル・空き）に重ねる"), ("focus", "窓を前面に出す"), ("nav", "上下左右の窓へ"), ("layout", "窓を分割配置する"),
                ("pick", "窓の一覧から選ぶ"), ("list", "窓の一覧を表示"), ("layouts", "型の一覧を表示"),
                ("move", "窓を移動する"), ("size", "大きさを変える"), ("state", "最大化・最小化・常に手前"),
                ("max", "窓を最大化する"), ("unmax", "最大化を戻す"), ("min", "窓を最小化する"),
@@ -2993,6 +2999,9 @@ MONITOR_HELP = "基準にするモニタ（primary・current・eDP-1 など）�
 MON_OPT = ("opt", "--monitor", "画面", "基準のモニタ（primary・current・eDP-1 など）。省くと、いまの窓があるモニタ")
 SIGNATURES = {
     "here": ([("pos", "窓", "窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ", True), MON_OPT], "選んだ窓を今の窓と同じ位置・大きさにして前面へ"),
+    "place": ([("pos", "置き先", "タイルの番号（0 は前面の窓の位置）か free（いちばん広い空きスペース）", True),
+               ("pos", "窓", "置く窓（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ。小窓では ←→ で置き先を動かせる", True),
+               ("flag", "--min", "置き先にあった元の窓を最小化する"), MON_OPT], "置き先（番号のタイル・前面の窓・空きスペース）に、選んだ窓を重ねる"),
     "focus": ([("pos", "窓", "窓の指定（クラス・題名の一部）か、5 桁以上の ID", False)], "窓を前面に出す"),
     "nav": ([("pos", "方向", "next / prev（いまの並びの番号順）、left / right / up / down", False)], "フォーカスを次・前・上下左右の窓へ移す"),
     "layout": ([("pos", "型", "型の名前（win layouts）か式（例: v(1,h(1,1))。略記 1,2:1/1/1,1 も可）。省くと小窓で選ぶ", True),
@@ -5054,7 +5063,7 @@ def run_config(page="shortcuts"):
 
 # ---------------------------------------------------------------- いまの窓と同じ形にする（win here）
 
-HERE_HINT = "↑↓ 選択 ・ ←→ 置き先を動かす ・ Enter 決定（置き先と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる"
+HERE_HINT = "↑↓ 選択 ・ ←→ 置き先を動かす（空きスペースにも） ・ Enter 決定（置き先と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる"
 
 
 def window_row_title(w, d):
@@ -5084,33 +5093,56 @@ def bring_here(wc, w, rect, maximized, workspace):
     return notice
 
 
-def cmd_here(args):
-    wc = WindowCalls()
-    cur = focused(wc)
-    d = wc.details(cur["id"])
-    rect = (d["x"], d["y"], d["width"], d["height"])
-    maximized = bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
-    ws = cur.get("workspace", 0)
-    cands = [w for w in reversed(normal_windows(wc)) if w["id"] != cur["id"]]
-    if args.selector:
-        if args.selector.startswith("!"):
-            w = launch(wc, args.selector[1:])
-        else:
-            found = find_windows(wc, args.selector, cands)
-            if not found:
-                raise WinError(f"窓が見つかりません: {args.selector}")
-            w = found[0]
-        notice = bring_here(wc, w, rect, maximized, ws)
-        if notice:
-            print(notice, file=sys.stderr)
-        return 0
-    return gui_here(wc, cur, rect, maximized, ws)
+FREE_MIN_RATIO = 0.05      # 空きスペースとして数える最小の広さ（作業領域に対する面積の割合）。細すぎるものは辺の長さでも除く
+FREE_MAX = 6               # 置き先の候補にする空きの数（広い順）
 
 
-def here_targets(wc, front, add_front):
-    """置き先の候補（いまの基準モニタ上のタイル）[{"id", "norm"（作業領域に対する割合の x, y, 幅, 高さ）, "label", "c"（画面での中心）}] と、
-    前面の窓のタイルの添字（なければ None）。add_front: 前面の窓がタイルの中になければ、その窓の場所を候補に足す。
-    タイルが 1 枚もないモニタは、作業領域全体を「空き」の 1 枚として返す。"""
+def free_rects(wc, exclude=()):
+    """基準モニタの作業領域のうち、窓に覆われていない空きスペース（極大の長方形）を、広い順に [(x, y, 幅, 高さ)]。
+    最小化されていない窓の枠で作業領域を区切り、その区切りの上で、窓のない長方形のうち、どの向きにも広げられないものを探す。"""
+    ax, ay, aw, ah = work_area(load_config())
+    mx, my, mw, mh = monitor_rect()
+    obst = []
+    for w, (x, y, rw, rh) in visible_windows(wc):
+        if w["id"] in exclude or not (mx <= x + rw / 2 < mx + mw and my <= y + rh / 2 < my + mh):
+            continue
+        x0, y0, x1, y1 = max(ax, x), max(ay, y), min(ax + aw, x + rw), min(ay + ah, y + rh)
+        if x1 > x0 and y1 > y0:
+            obst.append((x0, y0, x1, y1))
+    xs = sorted({ax, ax + aw, *(o[0] for o in obst), *(o[2] for o in obst)})
+    ys = sorted({ay, ay + ah, *(o[1] for o in obst), *(o[3] for o in obst)})
+    nx, ny = len(xs) - 1, len(ys) - 1
+    occ = [[any(o[0] <= xs[i] and xs[i + 1] <= o[2] and o[1] <= ys[j] and ys[j + 1] <= o[3] for o in obst)
+            for i in range(nx)] for j in range(ny)]
+    pre = [[0] * (nx + 1) for _ in range(ny + 1)]                      # 埋まっている区画の数の累積（長方形が空きかを 1 回で調べる）
+    for j in range(ny):
+        for i in range(nx):
+            pre[j + 1][i + 1] = pre[j][i + 1] + pre[j + 1][i] - pre[j][i] + occ[j][i]
+
+    def empty(i0, i1, j0, j1):
+        return pre[j1 + 1][i1 + 1] - pre[j0][i1 + 1] - pre[j1 + 1][i0] + pre[j0][i0] == 0
+
+    out = []
+    for j0 in range(ny):
+        for j1 in range(j0, ny):
+            for i0 in range(nx):
+                for i1 in range(i0, nx):
+                    if not empty(i0, i1, j0, j1):
+                        break                                            # i1 を広げても空きにならない
+                    if (i0 > 0 and empty(i0 - 1, i1, j0, j1)) or (i1 < nx - 1 and empty(i0, i1 + 1, j0, j1)) \
+                            or (j0 > 0 and empty(i0, i1, j0 - 1, j1)) or (j1 < ny - 1 and empty(i0, i1, j0, j1 + 1)):
+                        continue                                         # まだ広げられる
+                    r = (xs[i0], ys[j0], xs[i1 + 1] - xs[i0], ys[j1 + 1] - ys[j0])
+                    if r[2] * r[3] >= FREE_MIN_RATIO * aw * ah and r[2] >= 0.1 * aw and r[3] >= 0.1 * ah:
+                        out.append(r)
+    out.sort(key=lambda r: -r[2] * r[3])
+    return out[:FREE_MAX]
+
+
+def place_targets(wc, front, add_front, exclude=()):
+    """置き先の候補（いまの基準モニタ上）: 並びのタイル（番号順）、前面の窓の場所（並びの外のとき）、空きスペース（広い順）。
+    [{"id", "norm"（作業領域に対する割合の x, y, 幅, 高さ）, "label", "c"（画面での中心）, "free", "abs"（空きの枠）}] と、前面の窓のタイルの添字
+    （なければ None）。タイルも空きもないときは、作業領域全体を「空き」の 1 枚として返す。"""
     cfg = load_config()
     ax, ay, aw, ah = work_area(cfg)
     cur = current_tiles(wc, cfg)
@@ -5127,16 +5159,19 @@ def here_targets(wc, front, add_front):
         targets.append({"id": front["id"], "norm": (bx, by, min(1.0 - bx, d["width"] / aw), min(1.0 - by, d["height"] / ah)),
                         "label": "ここ"})
         index = len(targets) - 1
+    for x, y, w, h in free_rects(wc, exclude):
+        targets.append({"id": None, "free": True, "abs": (x, y, w, h), "norm": ((x - ax) / aw, (y - ay) / ah, w / aw, h / ah),
+                        "label": "空き"})
     if not targets:
-        targets = [{"id": None, "norm": (0.0, 0.0, 1.0, 1.0), "label": "空き"}]
+        targets = [{"id": None, "free": True, "abs": (ax, ay, aw, ah), "norm": (0.0, 0.0, 1.0, 1.0), "label": "空き"}]
     for t in targets:
         x, y, w, h = t["norm"]
         t["c"] = (ax + (x + w / 2) * aw, ay + (y + h / 2) * ah)
     return targets, index
 
 
-def here_move(wc, front, targets, index, d):
-    """置き先を、左（d=-1）・右（d=1）の隣のタイルへ（実際の位置で決める）。端を越えるときは、その向きの隣のモニタへ
+def place_move(wc, front, targets, index, d):
+    """置き先を、左（d=-1）・右（d=1）の隣の候補へ（実際の位置で決める）。端を越えるときは、その向きの隣のモニタへ
     （基準のモニタを切り替えて、並びを逆算し直す）。動けなければ None。戻り値: (新しい候補, 新しい添字)。"""
     cx, cy = targets[index]["c"]
     side = [(abs(t["c"][0] - cx) + abs(t["c"][1] - cy), n) for n, t in enumerate(targets)
@@ -5151,18 +5186,86 @@ def here_move(wc, front, targets, index, d):
         return None
     resolve_monitor(mons[min(nxt)[1]]["name"])
     ax, ay, aw, ah = work_area(load_config())
-    new, _ = here_targets(wc, front, False)
-    # 入ってくる側の端に近く、いまの高さに近いタイルへ
+    new, _ = place_targets(wc, front, False)
+    # 入ってくる側の端に近く、いまの高さに近い候補へ
     key = lambda t: ((t["c"][0] - ax) if d > 0 else (ax + aw - t["c"][0])) + abs(t["c"][1] - cy) / 2
     return new, min(range(len(new)), key=lambda n: key(new[n]))
 
 
-def gui_here(wc, cur, rect, maximized, workspace):
-    """絞り込みの小窓で窓（先頭 ! でアプリ）を選び、置き先のタイルと同じ形にして前面に出す。置き先は、はじめは前面の窓のタイル。
-    左右矢印で隣のタイル（端を越えたら隣のモニタ）へ動かせる。"""
+def place_initial(targets, index, n):
+    """n（0＝前面の窓のタイル、1 以上＝その番号のタイル、"free"＝いちばん広い空き）が指す最初の置き先の添字。"""
+    tiles = [k for k, t in enumerate(targets) if not t.get("free") and t["label"] != "ここ"]
+    if n == "free":
+        k = next((k for k, t in enumerate(targets) if t.get("free")), None)         # 空きは広い順に並んでいる
+        if k is None:
+            raise WinError("空きスペースがありません")
+        return k
+    if n == 0:
+        return index if index is not None else 0
+    if not 1 <= n <= len(tiles):
+        raise WinError(f"タイル {n} がありません（いまの並びのタイルは {len(tiles)} 枚）")
+    return tiles[n - 1]
+
+
+def place_apply(wc, front, targets, index, chosen, minimize=False):
+    """chosen を、置き先と同じ位置・大きさ（最大化なら最大化）にして前面に出す。通知する文を返す。"""
+    by_id = {w["id"]: w for w in normal_windows(wc)}
+    t = targets[index]
+    if t["id"] is None:                      # 空きスペース: その枠に置く
+        dest, dmax, dws = t["abs"], False, front.get("workspace", 0)
+    else:
+        d = wc.details(t["id"])
+        dest = (d["x"], d["y"], d["width"], d["height"])
+        dmax = bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
+        dws = (by_id.get(t["id"]) or front).get("workspace", 0)
+    notice = bring_here(wc, chosen, dest, dmax, dws)
+    if minimize and t["id"] is not None and t["id"] != chosen["id"]:
+        wc.simple("Minimize", t["id"])       # 元の窓は後ろに残るが、--min なら最小化する
+    return notice
+
+
+def cmd_place(args):
+    """置き先（番号のタイル・前面の窓・空き）に、選んだ窓を重ねる。窓を省くと小窓で選び、左右矢印で置き先を動かせる。"""
+    wc = WindowCalls()
+    front = focused(wc)
+    n = args.n
+    if n != "free":
+        try:
+            n = int(n)
+        except ValueError:
+            raise WinError(f"置き先は、タイルの番号（0 は前面の窓）か free です: {args.n}")
+    targets, fidx = place_targets(wc, front, True)
+    index = place_initial(targets, fidx, n)
+    if args.window:
+        tid = targets[index]["id"]
+        cands = [w for w in reversed(normal_windows(wc)) if w["id"] != tid]
+        if args.window.startswith("!"):
+            w = launch(wc, args.window[1:])
+        else:
+            found = find_windows(wc, args.window, cands)
+            if not found:
+                raise WinError(f"窓が見つかりません: {args.window}")
+            w = found[0]
+        if n == "free":                       # 置く窓がもともと空きに重なっていたら、その分を除いて空きを取り直す
+            targets, _ = place_targets(wc, front, True, exclude=(w["id"],))
+            index = place_initial(targets, fidx, "free")
+        notice = place_apply(wc, front, targets, index, w, args.min)
+        if notice:
+            print(notice, file=sys.stderr)
+        return 0
+    return gui_place(wc, front, targets, index, args.min)
+
+
+def cmd_here(args):
+    """前面の窓の場所（place 0）に、選んだ窓を重ねる。"""
+    args.n, args.window, args.min = "0", args.selector, False
+    return cmd_place(args)
+
+
+def gui_place(wc, front, targets, index, minimize=False):
+    """絞り込みの小窓で窓（先頭 ! でアプリ）を選び、置き先と同じ形にして前面に出す。左右矢印で置き先を隣の候補
+    （端を越えたら隣のモニタ）へ動かせる。"""
     cfg = load_config()
-    targets, index = here_targets(wc, cur, True)
-    by_ws = {w["id"]: w for w in normal_windows(wc)}
     child = spawn_tilepick()
 
     def send(msg):
@@ -5174,21 +5277,21 @@ def gui_here(wc, cur, rect, maximized, workspace):
         return [w for w in reversed(normal_windows(wc)) if w["id"] != tid]
 
     def tile(notice="", first=False):
-        cands = candidates()
         mons, mon = monitors_for_preview(cfg)
         t = targets[index]
-        title = "ここに持ってくる" if t["id"] == cur["id"] else (
-            "空いている場所に持ってくる" if t["id"] is None else f"タイル {index + 1}（{t['label']}）に持ってくる")
+        title = ("ここに持ってくる" if t["id"] == front["id"] else
+                 "空きスペースに持ってくる" if t.get("free") else f"タイル {index + 1}（{t['label']}）に持ってくる")
         msg = {"cmd": "tile", "index": index, "n": len(targets), "layout": "", "title": title, "hint": HERE_HINT,
                "rects": [t["norm"] for t in targets], "labels": [t["label"] if n != index else "" for n, t in enumerate(targets)],
+               "free": [bool(t.get("free")) for t in targets],
                "windows": [{"id": w["id"], "cls": w.get("wm_class") or "", "title": window_row_title(w, wc.details(w["id"])),
-                            "icon": icon_for_class(w.get("wm_class"))} for w in cands],
+                            "icon": icon_for_class(w.get("wm_class"))} for w in candidates()],
                "notice": notice, "movable": True, "mon": mon}
         if first:
             msg["apps"] = list_apps()
         return msg
 
-    chosen, notice = None, ""
+    chosen = None
     try:
         send(tile(first=True))
         wid = center_and_focus(wc, child, TILEPICK_APP_ID)
@@ -5201,7 +5304,7 @@ def gui_here(wc, cur, rect, maximized, workspace):
             act = res.get("act")
             try:
                 if act == "target":
-                    moved = here_move(wc, cur, targets, index, res.get("dir", 0))
+                    moved = place_move(wc, front, targets, index, res.get("dir", 0))
                     if moved:
                         targets, index = moved
                     send(tile("" if moved else "その向きに置き先はありません"))
@@ -5231,16 +5334,7 @@ def gui_here(wc, cur, rect, maximized, workspace):
         except subprocess.TimeoutExpired:
             child.kill()
     time.sleep(0.2)                          # 小窓が閉じて、フォーカスが戻るのを待ってから動かす
-    tid = targets[index]["id"]
-    if tid is None:                          # 空いているモニタ: 作業領域いっぱいに置く
-        ax, ay, aw, ah = work_area(cfg)
-        dest, dmax, dws = (ax, ay, aw, ah), False, workspace
-    else:
-        d = wc.details(tid)
-        dest = (d["x"], d["y"], d["width"], d["height"])
-        dmax = bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
-        dws = (by_ws.get(tid) or cur).get("workspace", workspace)
-    notice = bring_here(wc, chosen, dest, dmax, dws)
+    notice = place_apply(wc, front, targets, index, chosen, minimize)
     if notice:
         print(notice, file=sys.stderr)
     return 0
@@ -6451,7 +6545,7 @@ def main(argv=None):
                 return report_error(e)
     args = ap.parse_args(argv)
     try:
-        if args.cmd in ("layout", "here", "pick", "prompt", "save", "run", "set"):
+        if args.cmd in ("layout", "here", "place", "pick", "prompt", "save", "run", "set"):
             resolve_monitor(getattr(args, "monitor", None))      # 基準のモニタを、最初に 1 回決める
         return args.fn(args)
     except WinError as e:
@@ -6532,6 +6626,13 @@ def build_parser():
     p.add_argument("-m", "--monitor", metavar="画面", help=MONITOR_HELP)
     p.add_argument("selector", nargs="?", help="窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ")
     p.set_defaults(fn=cmd_here)
+
+    p = sub.add_parser("place", help="置き先（番号のタイル・前面の窓・空きスペース）に、選んだ窓を重ねる（窓を省くと小窓。←→ で置き先を動かせる）")
+    p.add_argument("-m", "--monitor", metavar="画面", help=MONITOR_HELP)
+    p.add_argument("--min", action="store_true", help="置き先にあった元の窓を最小化する")
+    p.add_argument("n", nargs="?", default="0", help="はじめの置き先。タイルの番号（0 は前面の窓の位置）か free（いちばん広い空きスペース）")
+    p.add_argument("window", nargs="?", help="置く窓（クラス・題名の一部、@left など）か !コマンド。省くと小窓で選ぶ")
+    p.set_defaults(fn=cmd_place)
 
     p = sub.add_parser("pick", help="窓の一覧を小さく出して選び、前面に出す（j/k・矢印・Enter）")
     p.add_argument("--id", action="store_true", help="前面に出さず、選んだ窓の ID だけを表示")
