@@ -125,6 +125,14 @@ def describe(w):
     return f"{w['id']} {w.get('wm_class')} 「{(w.get('title') or '')[:40]}」"
 
 
+def grouped_ids(wc):
+    """いずれかのグループに入っている窓の ID。グループがなければ（保存先がなければ）、保存先を読まずに空。"""
+    from .groups import GROUPS_FILE, load_groups        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    if not os.path.exists(GROUPS_FILE):
+        return set()
+    return {m["id"] for g in load_groups(wc).values() for m in g["members"]}
+
+
 def parse_window_spec(sel):
     """窓の指定を (照合する語, 窓がなければ起動するか, 起動コマンド) に分ける。
     `クラス名?` ＝ なければ、アプリ一覧から探したコマンドで起動。`クラス名?コマンド` ＝ なければ、そのコマンドで起動。"""
@@ -188,7 +196,7 @@ def cmd_layout(args):
             raise WinError(f"タイルは {n} 枚ですが、窓の指定が {len(sels)} 個あります")
         pool = usable_windows(wc)
         taken = set()
-        seen_groups = {}
+        seen_groups, grouped = {}, None
         for i, sel in enumerate(sels):                            # グループのメンバーは、ほかのタイルの窓として拾わない（指定の順に関係なく）
             if sel.lower().startswith("@group:"):
                 from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
@@ -216,6 +224,10 @@ def cmd_layout(args):
                 continue
             base, optional, fallback = parse_window_spec(sel)         # クラス名?＝窓がなければ起動、クラス名?コマンド＝そのコマンドで起動
             found = [w for w in find_windows(wc, base, pool) if w["id"] not in taken]
+            if optional and found:                                    # 「なければ起動」の指定は、どのグループのメンバーも拾わない（グループは自分の窓を持つ）
+                if grouped is None:
+                    grouped = grouped_ids(wc)
+                found = [w for w in found if w["id"] not in grouped]
             if not found and optional:
                 cmdline = fallback or launch_for_class(base)
                 if not cmdline:
