@@ -1,5 +1,6 @@
 """アプリの状態（Firefox のタブ・端末の作業ディレクトリ）と、いまの並びの逆算。"""
 
+from concurrent.futures import ThreadPoolExecutor
 import configparser
 import functools
 import json
@@ -436,29 +437,41 @@ def run_arrangement(wc, entry):
     except WinError:
         ws = 0
     pool = list(reversed(normal_windows(wc)))                 # 前面が先
-    used, notes = set(), []
-    for e in entry.get("windows", []):                        # 保存順（下 → 上）に、重なり順も再現する
-        cls = e.get("cls", "")
-        found = [w for w in pool if (w.get("wm_class") or "") == cls and w["id"] not in used]
-        found.sort(key=lambda w: (w.get("title") or "")[:60] != e.get("title"))   # 同じクラスなら題名が一致する窓を優先
-        w = found[0] if found else None
-        if w is None and e.get("launch"):
-            try:
-                w = launch(wc, e["launch"], 12)
-            except WinError as err:
-                notes.append(f"{cls}: 起動できませんでした（{err}）")
-        if w is None:
-            if not e.get("launch"):
-                notes.append(f"{cls}: 窓が見つかりません（起動コマンドも不明）")
-            continue
-        used.add(w["id"])
-        if e.get("maximized"):
-            msg = bring_here(wc, w, (0, 0, 0, 0), True, ws)
+    used = set()
+    events = []                                               # 保存順に、("note", 文) か ("job", クラス, 窓, 置く処理)
+    with ThreadPoolExecutor(max_workers=max(1, len(entry.get("windows", [])))) as ex:      # 置いたあとの定着待ちは、窓ごとに並行して行う
+        for e in entry.get("windows", []):                    # 保存順（下 → 上）。起動は 1 つずつ（新しい窓の見分けが混ざらないように）
+            cls = e.get("cls", "")
+            found = [w for w in pool if (w.get("wm_class") or "") == cls and w["id"] not in used]
+            found.sort(key=lambda w: (w.get("title") or "")[:60] != e.get("title"))   # 同じクラスなら題名が一致する窓を優先
+            w = found[0] if found else None
+            if w is None and e.get("launch"):
+                try:
+                    w = launch(wc, e["launch"], 12)
+                except WinError as err:
+                    events.append(("note", f"{cls}: 起動できませんでした（{err}）"))
+            if w is None:
+                if not e.get("launch"):
+                    events.append(("note", f"{cls}: 窓が見つかりません（起動コマンドも不明）"))
+                continue
+            used.add(w["id"])
+            if e.get("maximized"):
+                job = ex.submit(bring_here, wc, w, (0, 0, 0, 0), True, ws, False)
+            else:
+                x, y, rw, rh = e["rect"]
+                job = ex.submit(bring_here, wc, w, (ax + round(x * aw), ay + round(y * ah), round(rw * aw), round(rh * ah)),
+                                False, ws, False)
+            events.append(("job", cls, w, job))
+        events = [ev if ev[0] == "note" else ("job", ev[1], ev[2], ev[3].result()) for ev in events]
+    notes = []
+    for ev in events:                                         # 重なり順は、保存順（下 → 上）に前面へ出して再現する
+        if ev[0] == "note":
+            notes.append(ev[1])
         else:
-            x, y, rw, rh = e["rect"]
-            msg = bring_here(wc, w, (ax + round(x * aw), ay + round(y * ah), round(rw * aw), round(rh * ah)), False, ws)
-        if msg:
-            notes.append(f"{cls}: {msg}")
+            _, cls, w, msg = ev
+            wc.simple("Activate", w["id"])
+            if msg:
+                notes.append(f"{cls}: {msg}")
     return notes
 
 

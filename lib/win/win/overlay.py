@@ -29,8 +29,9 @@ def window_row_title(w, d):
     return t
 
 
-def bring_here(wc, w, rect, maximized, workspace):
-    """w を rect と同じ位置・大きさ（最大化なら最大化）にして、前面に出す。通知する文を返す（無ければ空）。"""
+def bring_here(wc, w, rect, maximized, workspace, activate=True):
+    """w を rect と同じ位置・大きさ（最大化なら最大化）にして、前面に出す。通知する文を返す（無ければ空）。
+    activate=False なら前面には出さない（複数の窓を並行して置いて、前面化は順序を決めて後でするとき）。"""
     if not w.get("in_current_workspace"):
         wc.call("MoveToWorkspace", "uu", w["id"], max(0, workspace))
     if wc.details(w["id"]).get("minimized"):
@@ -42,7 +43,8 @@ def bring_here(wc, w, rect, maximized, workspace):
         got = place_settled(wc, w["id"], rect)
         if got:
             notice = f"希望の大きさにならず {got[2]}x{got[3]} です（最小サイズなど）"
-    wc.simple("Activate", w["id"])
+    if activate:
+        wc.simple("Activate", w["id"])
     return notice
 
 
