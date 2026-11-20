@@ -1,5 +1,5 @@
 #!/bin/sh
-# win-helper@local（デスクトップの取得・切り替えの D-Bus）を、GNOME Shell の拡張として導入する。
+# win-helper@local（デスクトップの取得・切り替えの D-Bus）を、GNOME Shell の拡張として導入する（ルートの install.sh --extension からも呼ばれる）。
 # 導入後、有効にして（enabled-extensions に win-helper@local を足す）、再ログインして読み込ませる（Wayland では再起動の代わりに必要）。
 set -e
 dst="$HOME/.local/share/gnome-shell/extensions/win-helper@local"

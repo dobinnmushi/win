@@ -1,6 +1,7 @@
 {
   "uuid": "win-helper@local",
   "name": "win helper",
-  "description": "win（~/projects/win）のための D-Bus。デスクトップ（ワークスペース）の取得と切り替えを公開する。",
+  "description": "Exposes a D-Bus interface for win: list and switch workspaces (desktops).",
+  "url": "https://github.com/dobinnmushi/win",
   "shell-version": ["50"]
 }

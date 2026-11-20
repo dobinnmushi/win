@@ -17,7 +17,8 @@
 ### 進捗（2026-11-21）
 - 済: `win shortcuts`（export・apply）、個人設定のリポジトリ `win-config`、keyd・変換キー前提の機能の削除（個人側へ）、標準の割り当てのプリセット化（コードは既定のキーを持たず、`presets/super-alt.toml` が 29 項目を持つ）。
 - 済: `apps.toml`（新しい窓の引数だけ。状態の保存は専用コードのまま）。
-- 残: 設計と個人の記録の分離の仕上げ、README・導入。
+- 済: README（英・日）・`install.sh`・`uninstall.sh`・MIT の LICENSE。
+- 残: スクリーンショット、設計メモの仕上げ、設定窓の拡張ソースを開く操作（ptyxis と nvim の直書き）の扱い、公開の判断。
 
 ### 切り分けのために足すもの（案）
 1. **宣言的なショートカット設定**: `~/.config/win/shortcuts.toml`（個人のファイル）と `win shortcuts apply|export`。いまは割り当てが dconf だけにあるので、再インストールで失われる。標準の割り当て（`Super+Alt+◯` 29 個は keyd の変換レイヤーを前提にした個人向けの選択）は、**既定を未割り当て**にし、**プリセット**（`presets/super-alt.toml` など）として同梱する。
