@@ -31,8 +31,17 @@ def place_settled(wc, wid, rect, tries=8):
     rect, got = tuple(rect), None
     for _ in range(tries):
         place(wc, wid, rect)
-        time.sleep(0.3)
-        got = tuple(wc.rect(wid))
+        seen_ok, moved = False, False
+        for _ in range(6):                       # 0.3 秒待つあいだ、0.05 秒ごとに見る
+            time.sleep(0.05)
+            got = tuple(wc.rect(wid))
+            if got == rect:
+                seen_ok = True
+            elif seen_ok:                        # いったん合ったのに、アプリ自身に動かされた（保存した大きさの復元など）: すぐ置き直す
+                moved = True
+                break
+        if moved:
+            continue
         if got[:2] != rect[:2]:
             # 最小サイズより小さい大きさを求めると、Mutter は大きさだけ直して位置を動かさない。位置だけ別に動かす
             wc.call("Move", "uii", wid, rect[0], rect[1])
