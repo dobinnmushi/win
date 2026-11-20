@@ -6,7 +6,7 @@ GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道�
 
 ```
 bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
-lib/win/win/            本体（24 のモジュール）
+lib/win/win/            本体（25 のモジュール）
 tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・helper_test.py（拡張の D-Bus の約束の試験）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
 docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）
 extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と install.sh
@@ -32,6 +32,7 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 | 状態・セット | `sets` | セット（保存した窓の並び）・プレビューの材料・モニタの一覧 |
 |  | `prompt` | コマンド入力の小窓（`win prompt`）と補完 |
 |  | `appstate` | いまの並びの逆算（タイルの順）・Firefox/端末の状態・`win save` |
+|  | `groups` | 窓のグループ（名前つき・保存つき）の保存と操作 |
 | 対話型の小窓 | `tilepick` | 汎用の小窓の描画側（`_tilepick`、GTK）と、絞り込み・アプリ一覧・端末版の対話 |
 |  | `dialog` | `Dialog`（親側の部品）と、1 回で選ぶ関数（`choose` など） |
 |  | `pickers` | 窓・セットを選ぶ小窓（`win pick`・`win set`・拡張の `pick()`） |
@@ -80,7 +81,16 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **巡回**: 層は ID の昇順で一巡する（Activate だけだと、上の 2 枚を行き来するだけになるため、順を固定する）。保存するものはない。
 - **下の層の扱い**: 覆うだけ（最小化しない）。タイルの逆算・窓の一覧は、すでに覆われた窓を無視するので、そのまま動く。
 - `win stack [N] [next|prev|list]`（N=0 は前面の窓のいるタイル）。`list` は `choose` の小窓（地図に各タイルの層の数、手前の層が先頭）。ショートカットの標準の割り当て先は `win-stack-next`・`win-stack-list`。拡張からは `stack(n)`（層の一覧）・`cycle(n, d)`（d 層ずらして前面へ）。
-- 次の段階（未着手）: 名前つき・保存つきのグループ（位置が違う窓の集まりも扱う）。
+
+## 4.1.1 窓のグループ（group）
+
+名前つき・保存つきの窓の集まり（`groups.py`、保存先 `~/.local/state/win/groups.json`。`WIN_GROUPS` で差し替え可）。重なり（4.1）が「同じ位置にたまたまある窓」なのに対し、グループは「明示した、順序つきのメンバー」。
+- **枠を共有する**: グループは 1 つの枠（位置・大きさ）を持つ。次のメンバーを、その枠へ置いて（別のデスクトップ・最小化・最大化は、今のデスクトップへ戻し・解いて）から前面に出す。メンバーがもともと重なっている必要はない。
+- **枠は手前のメンバーに追従する**: 手前のメンバーを動かしたら、次の切り替えはその位置へ出る。
+- **メンバー**: 窓の ID と順序（巡回の順）。1 つの窓は高々 1 つのグループに入る（別のグループへ足すと移る）。閉じた窓は読み込み時に取り除き、空になったグループは消す。
+- `win group [list|new 名前 [窓…]|add 名前 [窓…]|remove [窓…]|delete 名前|next|prev|show|select [名前]|place 名前 [タイル]|from-stack [タイル] [名前]]`。名前を省くと、前面の窓の属するグループ（ショートカットに向く）。`show` は全メンバーを枠へ置く（置く処理は窓ごとに並行）。`select` は小窓（手前のメンバーが先頭）。`from-stack` は重なり（4.1）をグループにする。標準のショートカット項目は `win-group-next`・`win-group-select`。
+- 拡張から: `group(名前, 窓…)`・`groups()`・`group_of(窓)` と `Group`（`members`・`active`・`rect`・`add`・`remove`・`delete`・`next`・`show`・`place`）。
+- **注意（環境の仕様）**: この環境は `workspaces-only-on-primary`（ワークスペースは主モニタにだけ適用）が true なので、副モニタ（eDP-1）にある窓は、すべてのデスクトップに出ていて、`MoveToWorkspace` が効かない。デスクトップをまたぐ動き（`Window.desktop`・グループの `show`）は、主モニタの窓が対象。
 
 ## 4.2 デスクトップ（ワークスペース）
 

@@ -16,7 +16,7 @@ from .appstate import cmd_browse, cmd_save, cmd_term
 from .tilepick import run_tile, run_tilepick
 from .ext import EXT, EXT_DIR, cmd_help, load_extensions, run_ext
 from .lsp import cmd_lsp
-from .overlay import cmd_close, cmd_config, cmd_here, cmd_move, cmd_pick, cmd_place, cmd_size, cmd_stack, cmd_state
+from .overlay import cmd_close, cmd_config, cmd_here, cmd_move, cmd_pick, cmd_place, cmd_size, cmd_stack, cmd_state, cmd_group, GROUP_ACTIONS
 
 
 def main(argv=None):
@@ -43,7 +43,7 @@ def main(argv=None):
                 return report_error(e)
     args = ap.parse_args(argv)
     try:
-        if args.cmd in ("layout", "here", "place", "stack", "pick", "prompt", "save", "run", "set"):
+        if args.cmd in ("layout", "here", "place", "stack", "group", "pick", "prompt", "save", "run", "set"):
             resolve_monitor(getattr(args, "monitor", None))      # 基準のモニタを、最初に 1 回決める
         return args.fn(args)
     except WinError as e:
@@ -137,6 +137,13 @@ def build_parser():
     p.add_argument("n", nargs="?", default="0", help="タイルの番号（0 は前面の窓のいるタイル）")
     p.add_argument("action", nargs="?", default="next", choices=["next", "prev", "list"], help="next（既定）・prev・list（小窓で選ぶ）")
     p.set_defaults(fn=cmd_stack)
+
+    p = sub.add_parser("group", help="窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）")
+    p.add_argument("-m", "--monitor", metavar="画面", help=MONITOR_HELP)
+    p.add_argument("action", nargs="?", default="list", choices=GROUP_ACTIONS,
+                   help="list（既定）・new 名前 [窓…]・add 名前 [窓…]・remove [窓…]・delete 名前・next|prev|show|select [名前]・place 名前 [タイル]・from-stack [タイル] [名前]")
+    p.add_argument("args", nargs="*", help="動作の引数（名前・窓の指定・タイルの番号）。名前を省くと、前面の窓の属するグループ")
+    p.set_defaults(fn=cmd_group)
 
     p = sub.add_parser("desktop", help="デスクトップ（ワークスペース）の表示・切り替え（N・next・prev・list。切り替えには拡張 win-helper@local が要る）")
     p.add_argument("target", nargs="?", default="", help="デスクトップの番号（1 から）・next・prev・list。省くと、いまのデスクトップを表示")

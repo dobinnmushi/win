@@ -25,6 +25,7 @@ from .sets import run_entry, set_summary
 from .prompt import run_inline
 from .appstate import current_tiles, cycle_stack, find_stack, tile_order
 from .desktop import desktops, switch_desktop, switch_relative
+from . import groups as grp
 from .tilepick import slot_map
 from .pickers import pick_window_map
 from .dialog import Dialog, Event, Item, Map, ask, choose, confirm, pick_tile, window_items
@@ -321,6 +322,78 @@ def api_switch_desktop(n, relative=False):
     switch_relative(int(n)) if relative else switch_desktop(int(n))
 
 
+class Group:
+    """窓のグループ（名前つき・保存つき）。メンバーは 1 つの枠を共有し、タブのように切り替わる。"""
+
+    def __init__(self, name):
+        self.name = name
+
+    def _data(self):
+        return grp.get_group(_wc(), self.name)
+
+    @property
+    def members(self):
+        wins = {w["id"]: w for w in normal_windows(_wc())}
+        return [Window(wins[m["id"]]) for m in self._data()["members"] if m["id"] in wins]
+
+    @property
+    def active(self):
+        g = self._data()
+        return next((w for w in self.members if w.id == g.get("active")), None)
+
+    @property
+    def rect(self):
+        return tuple(grp.group_rect(_wc(), self._data()))
+
+    def add(self, *windows):
+        """窓を足し、グループの枠へ置いて、最後に足した窓を手前にする（ほかのグループにいた窓は移る）。"""
+        grp.add_members(_wc(), self.name, [w._info for w in windows])
+
+    def remove(self, *windows):
+        """窓をグループから外す。"""
+        grp.remove_members(_wc(), [w._info for w in windows])
+
+    def delete(self):
+        """グループを消す（窓は閉じない）。"""
+        grp.delete_group(_wc(), self.name)
+
+    def next(self, d=1):
+        """いま手前のメンバーから d 個ずれたメンバーを、グループの枠へ置いて前面に出して返す（一巡する）。"""
+        return Window(grp.cycle_group(_wc(), self.name, d)[0])
+
+    def show(self):
+        """全メンバーをグループの枠へ置き（別のデスクトップ・最小化も戻す）、手前のメンバーを前面に出す。"""
+        grp.show_group(_wc(), self.name)
+
+    def place(self, rect):
+        """グループの枠を rect に変えて、全メンバーをそこへ置く。"""
+        grp.place_group(_wc(), self.name, tuple(int(v) for v in rect))
+
+
+def api_groups():
+    """いまあるグループすべて。"""
+    return [Group(n) for n in grp.load_groups(_wc())]
+
+
+def api_group(name, *windows):
+    """name のグループ。windows を渡すと、その窓で新しく作る（すでにあれば足す）。なければ WinError。"""
+    wc = _wc()
+    if windows:
+        if name in grp.load_groups(wc):
+            Group(name).add(*windows)
+        else:
+            grp.create_group(wc, name, [w._info for w in windows])
+    else:
+        grp.get_group(wc, name)
+    return Group(name)
+
+
+def api_group_of(w):
+    """窓 w の属するグループ。どこにも属さなければ None。"""
+    n = grp.group_of(_wc(), w.id)
+    return None if n is None else Group(n)
+
+
 def api_window_items(exclude=()):
     """今のワークスペースで最小化されていない窓を、一覧の行にする（value は Window）。"""
     return window_items(_wc(), exclude, wrap=Window)
@@ -556,6 +629,7 @@ def make_winapi():
                  "layout": api_layout, "apply_set": api_apply_set, "run_command": api_run_command, "nav": api_nav,
                  "launch": api_launch, "layouts": api_layouts, "browse": api_browse, "term": api_term, "pick": api_pick, "slot_of": api_slot_of,
                  "tiles": api_tiles, "slots": api_slots, "Item": Item, "Map": Map, "Event": Event, "Dialog": ApiDialog, "stack": api_stack, "cycle": api_cycle, "desktops": desktops, "switch_desktop": api_switch_desktop,
+                 "Group": Group, "groups": api_groups, "group": api_group, "group_of": api_group_of,
                  "choose": choose, "confirm": confirm, "ask": ask, "pick_tile": pick_tile, "pick_window": api_pick_window,
                  "window_items": api_window_items, "resolve": api_resolve, "Window": Window, "WinError": WinError}.items():
         setattr(m, k, v)
@@ -758,6 +832,41 @@ def stack(n: int = 0) -> list[Window]:
 def cycle(n: int = 0, d: int = 1) -> Window:
     \"\"\"n 番目のタイルの重なりで、いま手前の層から d 層（負なら前へ）ずらした窓を前面に出して返す。層は一巡する。重なりがなければ WinError。
     例 cycle(0)  # 前面の窓のいるタイルで、次の層を表示する\"\"\"
+class Group:
+    \"\"\"窓のグループ（名前つき・保存つき。~/.local/state/win/groups.json）。メンバーは 1 つの枠を共有し、タブのように切り替わる。
+    1 つの窓は高々 1 つのグループに入る。閉じた窓は、自動でメンバーから外れる。例（手前の窓のグループを次のメンバーへ）:
+    g = group_of(focused())
+    if g: g.next()\"\"\"
+    name: str
+    @property
+    def members(self) -> list[Window]:
+        \"\"\"メンバー（巡回の順）。\"\"\"
+    @property
+    def active(self) -> Window | None:
+        \"\"\"いま手前のメンバー。\"\"\"
+    @property
+    def rect(self) -> tuple[int, int, int, int]:
+        \"\"\"グループの枠。手前のメンバーがいまいる枠（動かしたものに追従する）。\"\"\"
+    def add(self, *windows: Window) -> None:
+        \"\"\"窓を足し、グループの枠へ置いて、最後に足した窓を手前にする。ほかのグループにいた窓は移る。\"\"\"
+    def remove(self, *windows: Window) -> None:
+        \"\"\"窓をグループから外す。\"\"\"
+    def delete(self) -> None:
+        \"\"\"グループを消す（窓は閉じない）。\"\"\"
+    def next(self, d: int = 1) -> Window:
+        \"\"\"いま手前のメンバーから d 個（負なら前へ）ずれたメンバーを、グループの枠へ置いて前面に出して返す。メンバーは一巡する。\"\"\"
+    def show(self) -> None:
+        \"\"\"全メンバーをグループの枠へ置き（別のデスクトップ・最小化も今のデスクトップへ戻す）、手前のメンバーを前面に出す。\"\"\"
+    def place(self, rect: tuple[int, int, int, int]) -> None:
+        \"\"\"グループの枠を rect に変えて、全メンバーをそこへ置く。\"\"\"
+
+def groups() -> list[Group]:
+    \"\"\"いまあるグループすべて。\"\"\"
+def group(name: str, *windows: Window) -> Group:
+    \"\"\"name のグループ。windows を渡すと、その窓で新しく作る（すでにあれば足す）。なければ WinError。
+    例 group("作業", at("firefox"), at("ptyxis")).show()\"\"\"
+def group_of(w: Window) -> Group | None:
+    \"\"\"窓 w の属するグループ。どこにも属さなければ None。\"\"\"
 def desktops() -> tuple[int, int]:
     \"\"\"(いまのデスクトップの番号, デスクトップの数)。番号は 1 から。数は、動的ワークスペースでは末尾の空のものを含む。
     拡張 win-helper@local が要る（なければ WinError）。\"\"\"
@@ -968,6 +1077,8 @@ API_SECTIONS = [
     ("起動・通知", ["launch", "browse", "term", "notify"]),
     ("重なった窓（層）", ["stack", "cycle"]),
     ("デスクトップ（ワークスペース）", ["desktops", "switch_desktop", "Window.desktop"]),
+    ("窓のグループ（名前つき・保存つき）", ["groups", "group", "group_of", "Group", "Group.members", "Group.active", "Group.rect", "Group.add",
+                              "Group.remove", "Group.delete", "Group.next", "Group.show", "Group.place"]),
     ("対話型の小窓（1 回で選ぶ）", ["choose", "confirm", "ask", "pick_tile", "pick_window", "window_items", "Item", "Map"]),
     ("対話型の小窓（やり取りを回す）", ["Dialog", "Dialog.rows", "Dialog.map", "Dialog.notice", "Dialog.keys", "Dialog.text", "Dialog.events", "Event"]),
 ]

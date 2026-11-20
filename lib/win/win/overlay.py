@@ -12,6 +12,7 @@ from .placement import launch, place_settled
 from .nav import visible_windows
 from .sets import monitors_for_preview, next_monitor
 from .appstate import current_tiles, cycle_stack, find_stack, tile_order, tile_stacks
+from . import groups as grp
 from .dialog import Dialog, Item, Map, choose
 from .configwin import run_config
 
@@ -246,6 +247,107 @@ def cmd_stack(args):
         return 1
     time.sleep(0.2)                                            # 小窓が閉じて、フォーカスが戻るのを待ってから前面に出す
     wc.simple("Activate", sel.value["id"])
+    return 0
+
+
+GROUP_ACTIONS = ["list", "new", "add", "remove", "delete", "next", "prev", "show", "select", "place", "from-stack"]
+
+
+def _windows_from(wc, specs):
+    """窓の指定（クラス・題名の一部・ID・@left など）のリストを窓にする。省けば前面の窓。"""
+    if not specs:
+        return [focused(wc)]
+    pool, out = list(reversed(normal_windows(wc))), []
+    for sel in specs:
+        found = find_windows(wc, sel, pool)
+        if not found:
+            raise WinError(f"窓が見つかりません: {sel}")
+        out.append(found[0])
+    return out
+
+
+def cmd_group(args):
+    """窓のグループ。new・add・remove・delete・next・prev・show・select・place・from-stack・list。"""
+    wc = WindowCalls()
+    act, a = args.action, list(args.args)
+
+    def need_name():
+        if not a:
+            raise WinError(f"グループの名前を指定してください（win group {act} 名前）")
+        return a[0]
+
+    if act == "list":
+        data = grp.load_groups(wc)
+        wins = {w["id"]: w for w in normal_windows(wc)}
+        if not data:
+            print("グループはありません（作るには win group new 名前 [窓…]）")
+        for name, g in data.items():
+            r = g.get("rect")
+            print(f"グループ {name}" + (f"（枠 {r[0]},{r[1]} {r[2]}x{r[3]}）" if r else "") + f"  {len(g['members'])} 枚")
+            for k, m in enumerate(g["members"], 1):
+                print(f"  {'*' if m['id'] == g['active'] else ' '} {k}. {describe_window(wins[m['id']])}")
+        return 0
+    if act in ("new", "add"):
+        name = need_name()
+        wins = _windows_from(wc, a[1:])
+        if act == "new":
+            grp.create_group(wc, name, wins)
+            notes = []
+            print(f"グループ {name} を作りました（{len(wins)} 枚）")
+        else:
+            notes = grp.add_members(wc, name, wins)
+            print(f"グループ {name} に {len(wins)} 枚を足しました")
+    elif act == "remove":
+        n = grp.remove_members(wc, _windows_from(wc, a))
+        print(f"{n} 枚をグループから外しました")
+        return 0
+    elif act == "delete":
+        grp.delete_group(wc, need_name())
+        print(f"グループ {a[0]} を消しました（窓は閉じません）")
+        return 0
+    elif act in ("next", "prev"):
+        name = grp.resolve_name(wc, a[0] if a else None)
+        w, k, n = grp.cycle_group(wc, name, 1 if act == "next" else -1)
+        print(f"グループ {name}: {k}/{n}  {describe_window(w)}")
+        return 0
+    elif act == "show":
+        notes = grp.show_group(wc, grp.resolve_name(wc, a[0] if a else None))
+    elif act == "select":
+        name = grp.resolve_name(wc, a[0] if a else None)
+        g = grp.get_group(wc, name)
+        wins = {w["id"]: w for w in normal_windows(wc)}
+        ids = [m["id"] for m in g["members"]]
+        i0 = ids.index(g["active"]) if g["active"] in ids else 0
+        order = ids[i0:] + ids[:i0]                        # いま手前のメンバーを先頭に、巡回の順に並べる
+        sel = choose(f"グループ {name}（{len(ids)} 枚）",
+                     [Item(f"{ids.index(i) + 1}. " + window_row_title(wins[i], wc.details(i)), wins[i].get("wm_class") or "",
+                           icon_for_class(wins[i].get("wm_class")), wins[i]) for i in order])
+        if sel is None:
+            return 1
+        time.sleep(0.2)                                    # 小窓が閉じて、フォーカスが戻るのを待ってから前面に出す
+        note = grp.activate_member(wc, name, sel.value["id"])
+        if note:
+            print(note, file=sys.stderr)
+        return 0
+    elif act == "place":
+        name = need_name()
+        front = focused(wc)
+        screen = default_screen()
+        n = a[1] if len(a) > 1 else "0"
+        targets, fidx = place_targets(wc, front, True, screen=screen)
+        index = place_initial(targets, fidx, "free" if n == "free" else int(n))
+        t = targets[index]
+        rect = t["abs"] if t["id"] is None else (lambda d: (d["x"], d["y"], d["width"], d["height"]))(wc.details(t["id"]))
+        notes = grp.place_group(wc, name, rect)
+    elif act == "from-stack":
+        n = int(a[0]) if a else 0
+        name = grp.group_from_stack(wc, n, a[1] if len(a) > 1 else None)
+        notes = []
+        print(f"重なりからグループ {name} を作りました")
+    else:
+        raise WinError(f"知らない動作です: {act}")
+    for note in notes:
+        print(note, file=sys.stderr)
     return 0
 
 

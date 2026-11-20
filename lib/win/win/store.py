@@ -170,6 +170,9 @@ MON_OPT = ("opt", "--monitor", "画面", "基準のモニタ（primary・current
 
 SIGNATURES = {
     "here": ([("pos", "窓", "窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ", True), MON_OPT], "選んだ窓を今の窓と同じ位置・大きさにして前面へ"),
+    "group": ([("pos", "動作", "list（既定）・new・add・remove・delete・next・prev・show・select・place・from-stack", True),
+               ("rep", "引数", "名前・窓の指定・タイルの番号（動作による）。名前を省くと、前面の窓の属するグループ", True), MON_OPT],
+              "窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）"),
     "desktop": ([("pos", "デスクトップ", "デスクトップの番号（1 から）・next・prev・list。省くと、いまのデスクトップを表示", True)],
                 "デスクトップ（ワークスペース）の表示・切り替え。切り替えには拡張 win-helper@local が要る"),
     "stack": ([("pos", "タイル", "タイルの番号（0 は前面の窓のいるタイル）", True),

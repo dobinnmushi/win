@@ -42,6 +42,8 @@ WIN_ACTIONS = [
     ("win-prompt", "コマンドを入力して窓を操作", "prompt", "<Super><Alt>semicolon", G_CMD),
     ("win-stack-next", "重なった窓の、次の層を表示", "stack next", "<Super><Alt>t", G_MOVE),
     ("win-stack-list", "重なった窓の層を、一覧から選ぶ", "stack list", "<Super><Alt>y", G_MOVE),
+    ("win-group-next", "グループの、次のメンバーを表示", "group next", "<Super><Alt>g", G_MOVE),
+    ("win-group-select", "グループのメンバーを、一覧から選ぶ", "group select", "<Super><Alt>u", G_MOVE),
     ("win-layout", "型を選んで窓を並べる", "layout", "<Super><Alt>m", G_ARRANGE),
     ("win-here", "選んだ窓を今の窓と同じ形にする", "here", "<Super><Alt>o", G_ARRANGE),
     ("win-set", "保存した並び（セット）を選んで適用", "set", "<Super><Alt>s", G_SET),
