@@ -233,8 +233,9 @@ def show_group(wc, name):
     return [n for n in notes if n]
 
 
-def place_group(wc, name, rect):
-    """グループ name の枠を rect に変えて、全メンバーをそこへ置く。"""
+def place_group_members(wc, name, rect):
+    """グループ name の枠を rect に変えて、全メンバーをそこへ置く（前面には出さない）。(メンバーの窓, 手前のメンバーの窓, 注意の一覧) を返す。
+    layout のタイルにグループを置くときも、これを使う。"""
     data = load_groups(wc)
     g = get_group(wc, name, data)
     g["rect"] = list(rect)
@@ -244,8 +245,37 @@ def place_group(wc, name, rect):
     members = [wins[m["id"]] for m in g["members"] if m["id"] in wins]
     with ThreadPoolExecutor(max_workers=max(1, len(members))) as ex:
         notes = list(ex.map(lambda w: bring(wc, w, rect, ws, activate=False), members))
-    wc.simple("Activate", g["active"])
-    return [n for n in notes if n]
+    return members, wins[g["active"]], [n for n in notes if n]
+
+
+def place_group(wc, name, rect):
+    """グループ name の枠を rect に変えて、全メンバーをそこへ置き、手前のメンバーを前面に出す。注意の一覧を返す。"""
+    _, active, notes = place_group_members(wc, name, rect)
+    wc.simple("Activate", active["id"])
+    return notes
+
+
+def active_window(wc, name):
+    """グループ name の手前のメンバーの窓（@group:名前 の指定が当たる窓）。メンバーがなければ None。グループがなければ WinError。"""
+    g = get_group(wc, name)
+    return _by_id(wc).get(g.get("active"))
+
+
+def define_group(wc, name, windows):
+    """窓 windows でグループ name を（作り直して）定義する。何度実行しても同じ結果になる。メンバーは、ほかのグループから移る。
+    すでにあれば、枠と手前のメンバー（まだメンバーなら）を保つ。置きはしない（置くのは、layout の @group: や show）。"""
+    if not windows:
+        raise WinError("窓がありません")
+    data = load_groups(wc)
+    old = data.get(name)
+    ids = [w["id"] for w in windows]
+    _leave(data, ids)
+    rect = (old or {}).get("rect") or list(_frame(wc, windows[0]["id"])[0])
+    act = (old or {}).get("active")
+    data[name] = {"members": [{"id": w["id"], "cls": w.get("wm_class") or ""} for w in windows], "rect": rect,
+                  "active": act if act in ids else ids[0]}
+    _write(data)
+    return data[name]
 
 
 def group_from_stack(wc, n=0, name=None):

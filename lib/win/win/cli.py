@@ -141,7 +141,7 @@ def build_parser():
     p = sub.add_parser("group", help="窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）")
     p.add_argument("-m", "--monitor", metavar="画面", help=MONITOR_HELP)
     p.add_argument("action", nargs="?", default="list", choices=GROUP_ACTIONS,
-                   help="list（既定）・new 名前 [窓…]・add 名前 [窓…]・remove [窓…]・delete 名前・next|prev|show|select [名前]・place 名前 [タイル]・from-stack [タイル] [名前]")
+                   help="list（既定）・new 名前 [窓…]・define 名前 窓の指定…・add 名前 [窓…]・remove [窓…]・delete 名前・next|prev|show|select [名前]・place 名前 [タイル]・from-stack [タイル] [名前]")
     p.add_argument("args", nargs="*", help="動作の引数（名前・窓の指定・タイルの番号）。名前を省くと、前面の窓の属するグループ")
     p.set_defaults(fn=cmd_group)
 

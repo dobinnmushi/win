@@ -130,6 +130,7 @@ AT_SELECTORS = [
     ("@others", "【複数】前面の窓以外の、見えている窓すべて"),
     ("@all", "【複数】このワークスペースの窓すべて（最小化も含む）"),
     ("@class:", "【複数】そのクラスの窓すべて（@class:firefox など。大文字小文字は区別しない）"),
+    ("@group:", "名前のグループの、手前のメンバー（@group:作業 など）。layout の窓の列では、グループ全体を 1 つのタイルに置く"),
     ("@pick", "その場で選ぶ（layout -i と同じ小窓。先頭 ! でアプリを起動して、その窓。Esc で命令ごと取り消す）"),
 ]
 
@@ -188,6 +189,9 @@ def at_window(wc, sel):
     if key.startswith(MULTI_SELECTORS) or key.startswith("@slot:") or key == "@pick":
         found = at_windows(wc, sel)
         return found[0] if found else None
+    if key.startswith("@group:"):
+        from .groups import active_window        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+        return active_window(wc, sel.split(":", 1)[1])
     if key == "@focused":
         return next((w for w in normal_windows(wc) if w.get("focus")), None)
     if key == "@prev":

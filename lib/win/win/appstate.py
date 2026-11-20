@@ -452,6 +452,10 @@ def arrangement_lines(wc, state=()):
         return [f"layout full {token(w)}", f"max -w {shlex.quote(cls)}"], notes, 1
     if maxed:
         notes.append(f"最大化している窓 {len(maxed)} 枚は含めていません")
+    from .groups import load_groups        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    gdata = load_groups(wc)
+    in_group = {m["id"] for g in gdata.values() for m in g["members"]}
+    dropped = [i for i in dropped if i not in in_group]              # グループのメンバーとして重なっている窓は、グループの行に書き出す
     if dropped:
         names = ", ".join(sorted({by_id[i].get("wm_class") or "?" for i in dropped}))
         notes.append(f"重なっている窓 {len(dropped)} 枚は含めていません（{names}）。各タイルで、いちばん上の窓だけ保存します")
@@ -471,7 +475,18 @@ def arrangement_lines(wc, state=()):
     if area < 0.6:
         notes.append("画面の一部しか使っていない並びです。呼ぶと、窓は画面いっぱいに広がります")
     expr, order = tile_order(cur, cfg)
-    return [f"layout {expr} " + " ".join(token(by_id[i]) for i in order)], notes, len(order)
+    defs, toks = [], []
+    for i in order:
+        name = next((n for n, g in gdata.items() if any(m["id"] == i for m in g["members"])), None)
+        if name is None:
+            toks.append(token(by_id[i]))
+            continue
+        toks.append(shlex.quote(f"@group:{name}"))                  # グループに入っている窓は、グループ全体を 1 つのタイルとして書き出す
+        if not any(d.startswith(f"group define {shlex.quote(name)} ") for d in defs):
+            wins = {w["id"]: w for w in normal_windows(wc)}
+            members = [wins[m["id"]] for m in gdata[name]["members"] if m["id"] in wins]
+            defs.append(f"group define {shlex.quote(name)} " + " ".join(token(w) for w in members))
+    return defs + [f"layout {expr} " + " ".join(toks)], notes, len(order)
 
 
 def save_arrangement(wc, name, overwrite=False, state=()):

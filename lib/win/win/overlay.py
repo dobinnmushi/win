@@ -6,9 +6,9 @@ import time
 from .common import WinError
 from .screen import default_screen, find_screen, load_config, work_area
 from .dbus import WindowCalls, find_windows, focused, normal_windows, targets
-from .store import icon_for_class
+from .store import icon_for_class, launch_for_class
 from .pickers import pick_rows
-from .placement import launch, place_settled
+from .placement import launch, parse_window_spec, place_settled
 from .nav import visible_windows
 from .sets import monitors_for_preview, next_monitor
 from .appstate import current_tiles, cycle_stack, find_stack, tile_order, tile_stacks
@@ -256,7 +256,7 @@ def cmd_stack(args):
     return 0
 
 
-GROUP_ACTIONS = ["list", "new", "add", "remove", "delete", "next", "prev", "show", "select", "place", "from-stack"]
+GROUP_ACTIONS = ["list", "new", "define", "add", "remove", "delete", "next", "prev", "show", "select", "place", "from-stack"]
 
 
 def _windows_from(wc, specs):
@@ -269,6 +269,29 @@ def _windows_from(wc, specs):
         if not found:
             raise WinError(f"窓が見つかりません: {sel}")
         out.append(found[0])
+    return out
+
+
+def resolve_specs(wc, specs):
+    """窓の指定（layout の窓の列と同じ書き方。クラス?・クラス?コマンド・!コマンド・@ の指定）を窓にする。同じ窓は 2 度使わない。"""
+    pool, taken, out = list(reversed(normal_windows(wc))), set(), []
+    for sel in specs:
+        if sel.startswith("!"):
+            w = launch(wc, sel[1:])
+        else:
+            base, optional, fallback = parse_window_spec(sel)
+            found = [x for x in find_windows(wc, base, pool) if x["id"] not in taken]
+            if found:
+                w = found[0]
+            elif optional:
+                cmdline = fallback or launch_for_class(base)
+                if not cmdline:
+                    raise WinError(f"窓が見つからず、起動コマンドも分かりません: {base}")
+                w = launch(wc, cmdline)
+            else:
+                raise WinError(f"窓が見つかりません: {sel}")
+        taken.add(w["id"])
+        out.append(w)
     return out
 
 
@@ -303,6 +326,14 @@ def cmd_group(args):
         else:
             notes = grp.add_members(wc, name, wins)
             print(f"グループ {name} に {len(wins)} 枚を足しました")
+    elif act == "define":
+        name = need_name()
+        if len(a) < 2:
+            raise WinError("窓の指定が要ります（win group define 名前 窓の指定…）")
+        wins = resolve_specs(wc, a[1:])
+        grp.define_group(wc, name, wins)
+        print(f"グループ {name} を定義しました（{len(wins)} 枚）")
+        return 0
     elif act == "remove":
         n = grp.remove_members(wc, _windows_from(wc, a))
         print(f"{n} 枚をグループから外しました")

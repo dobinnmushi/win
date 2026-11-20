@@ -90,6 +90,11 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **メンバー**: 窓の ID と順序（巡回の順）。1 つの窓は高々 1 つのグループに入る（別のグループへ足すと移る）。閉じた窓は読み込み時に取り除き、空になったグループは消す。
 - `win group [list|new 名前 [窓…]|add 名前 [窓…]|remove [窓…]|delete 名前|next|prev|show|select [名前]|place 名前 [タイル]|from-stack [タイル] [名前]]`。名前を省くと、前面の窓の属するグループ（ショートカットに向く）。`show` は全メンバーを枠へ置く（置く処理は窓ごとに並行）。`select` は小窓（手前のメンバーが先頭）。`from-stack` は重なり（4.1）をグループにする。標準のショートカット項目は `win-group-next`（Super+Alt+G、変換＋G）・`win-group-select`（Super+Alt+U、変換＋U）。割り当て済みで、実キーと keyd 経由の両方を実機で確認した（手前のメンバーの切り替え・小窓での選択）。
 - 拡張から: `group(名前, 窓…)`・`groups()`・`group_of(窓)` と `Group`（`members`・`active`・`rect`・`add`・`remove`・`delete`・`next`・`show`・`place`）。
+- **layout・set への組み込み**（使わないコマンドの重さは変わらない。`@group:` が出たときだけ、グループの処理が動く）:
+  - `@group:名前`（窓の指定）: `layout` の窓の列で、グループ全体を 1 つのタイルに置く（全メンバーを枠へ置き、手前のメンバーだけ前面に出す）。グループのメンバーは、ほかのタイルの窓として拾わない（指定の順に関係なく）。単独の窓の指定として使う場所では、手前のメンバーに当たる。
+  - `group define 名前 窓の指定…`: 窓の指定（`クラス?`・`クラス?コマンド`・`!コマンド`・`@…`。layout の窓の列と同じ）でグループを（作り直して）定義する。何度実行しても同じ結果。置きはしない。窓の ID でなく指定で定義するので、再ログイン後も、`set` の行として再現できる。
+  - `win save`: グループに入っている窓を、`group define 名前 …` の行と、`layout … @group:名前 …` の窓の列として書き出す。グループのメンバーとして重なっている窓は、「含めていません」の注意に数えない。
+  - 例（set の `run`）: `group define 作業 firefox? org.gnome.Ptyxis?` と `layout lr @group:作業 thunderbird?` を 2 行に。
 - **注意（環境の仕様）**: この環境は `workspaces-only-on-primary`（ワークスペースは主モニタにだけ適用）が true なので、副モニタ（eDP-1）にある窓は、すべてのデスクトップに出ていて、`MoveToWorkspace` が効かない。デスクトップをまたぐ動き（`Window.desktop`・グループの `show`）は、主モニタの窓が対象。
 
 ## 4.2 デスクトップ（ワークスペース）

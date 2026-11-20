@@ -188,11 +188,26 @@ def cmd_layout(args):
             raise WinError(f"タイルは {n} 枚ですが、窓の指定が {len(sels)} 個あります")
         pool = usable_windows(wc)
         taken = set()
+        for i, sel in enumerate(sels):                            # グループのメンバーは、ほかのタイルの窓として拾わない（指定の順に関係なく）
+            if sel.lower().startswith("@group:"):
+                from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+                try:
+                    taken |= {m["id"] for m in get_group(wc, sel.split(":", 1)[1])["members"]}
+                except WinError as e:
+                    raise WinError(f"タイル {i + 1}: {e}")
         for i, sel in enumerate(sels):
             if sel in ("-", "_"):
                 continue
             if sel.startswith("!"):
                 plan[i] = ("run", sel[1:])
+                continue
+            if sel.lower().startswith("@group:"):                     # グループ全体を、このタイルに置く
+                from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+                try:
+                    get_group(wc, sel.split(":", 1)[1])
+                except WinError as e:
+                    raise WinError(f"タイル {i + 1}: {e}")
+                plan[i] = ("group", sel.split(":", 1)[1])
                 continue
             base, optional, fallback = parse_window_spec(sel)         # クラス名?＝窓がなければ起動、クラス名?コマンド＝そのコマンドで起動
             found = [w for w in find_windows(wc, base, pool) if w["id"] not in taken]
@@ -233,7 +248,7 @@ def cmd_layout(args):
             plan[i] = ("win", w)
 
     for i, (r, p) in enumerate(zip(rects, plan), 1):
-        what = "（空）" if p is None else (f"起動: {p[1]}" if p[0] == "run" else describe(p[1]))
+        what = "（空）" if p is None else (f"起動: {p[1]}" if p[0] == "run" else f"グループ {p[1]}" if p[0] == "group" else describe(p[1]))
         print(f"タイル {i}: x={r[0]} y={r[1]} {r[2]}x{r[3]}  ← {what}")
     if args.dry_run:
         return 0
@@ -242,17 +257,28 @@ def cmd_layout(args):
         me = focused(wc)["id"]
     except WinError:
         me = None
-    placed, results, settling = [], [], []
+    placed, results, settling, group_jobs = {}, [], [], []
     with ThreadPoolExecutor(max_workers=max(1, n)) as pool:           # 置いたあとの定着待ち（窓ごとに 0.3 秒以上）は並行して行う
         for i, (r, p) in enumerate(zip(rects, plan), 1):
             if p is None:
                 continue
+            if p[0] == "group":                                       # グループは全メンバーを枠へ置く（前面に出すのは手前のメンバーだけ）
+                from .groups import place_group_members        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+                group_jobs.append((i, r, pool.submit(place_group_members, wc, p[1], r)))
+                continue
             w = launch(wc, p[1]) if p[0] == "run" else p[1]           # 起動は 1 つずつ（新しい窓の見分けが混ざらないように）
             settling.append(pool.submit(place_settled, wc, w["id"], r))
-            placed.append(w)
+            placed[i] = w
             results.append((w["id"], r, i))
         for f in settling:
             f.result()
+        for i, r, job in group_jobs:
+            members, active, notes = job.result()
+            placed[i] = active
+            results.extend((m["id"], r, i) for m in members)
+            for note in notes:
+                print(f"  注意: タイル {i}: {note}", file=sys.stderr)
+    placed = [placed[i] for i in sorted(placed)]                      # タイルの順
     raise_group(wc, placed, me)
     # 前面に出したあとに、アプリ自身が大きさを戻すことがある（Firefox で 5px 足りなくなった例）。ずれた窓は、もう一度置き直す
     launched = any(p is not None and p[0] == "run" for p in plan)
@@ -260,9 +286,9 @@ def cmd_layout(args):
     for delay in ((0.5, 1.5) if launched else (0.5,)):        # 起動した窓は、セッションの復元などで遅れて動くことがあるので、もう 1 回確認する
         time.sleep(delay)
         for wid, r, i in results:
-            got_by[i] = None if tuple(wc.rect(wid)) == tuple(r) else place_settled(wc, wid, r, tries=6)
+            got_by[wid] = None if tuple(wc.rect(wid)) == tuple(r) else place_settled(wc, wid, r, tries=6)
     for wid, r, i in results:
-        got = got_by.get(i)
+        got = got_by.get(wid)
         if got:
             print(f"  注意: タイル {i} の窓は希望の大きさにならず {got[2]}x{got[3]}@({got[0]},{got[1]}) です"
                   f"（最小サイズなど）", file=sys.stderr)
