@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import itertools
+import json
 import math
 import os
 import re
@@ -54,6 +55,40 @@ def place_settled(wc, wid, rect, tries=8):
         if got[:2] == rect[:2] and got[2] >= rect[2] and got[3] >= rect[3]:
             return got
     return got
+
+
+WATCH_SECONDS = 10.0
+
+
+def watch_settled(wc, items, limit=WATCH_SECONDS):
+    """置いた窓 items=[(窓の ID, 枠)] を limit 秒のあいだ見張り、アプリ自身に動かされたら置き直す（黙って行う）。
+
+    起動直後のアプリは、前回の大きさの復元などで、置いたあとに遅れて大きさを変えることがある（遅れの長さは分からない）。
+    見張るのは起動した窓だけ。最小サイズで縮まらないだけの枠は、place_settled と同じく確定として扱う。
+    """
+    end = time.time() + limit
+    tried = {wid: 0.0 for wid, r in items}                   # 最後に置き直した時刻（失敗しても、間をあけて試し続ける）
+    while time.time() < end:
+        for wid, r in items:
+            try:
+                cur = tuple(wc.rect(wid))
+                fine = cur == tuple(r) or (cur[:2] == tuple(r[:2]) and cur[2] >= r[2] and cur[3] >= r[3])
+                if not fine and time.time() - tried[wid] >= 0.5:
+                    place_settled(wc, wid, r, tries=6)
+                    tried[wid] = time.time()
+            except WinError:                                  # 窓が閉じられた
+                continue
+        time.sleep(0.1)
+
+
+def spawn_watch(items):
+    """watch_settled を別プロセスで始める（layout はすぐ返り、見張りだけが最大 WATCH_SECONDS 秒続く）。"""
+    if not items:
+        return
+    lib = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = "import sys, json; sys.path.insert(0, sys.argv[1]); from win.placement import watch_settled; from win.dbus import WindowCalls; watch_settled(WindowCalls(), [(w, tuple(r)) for w, r in json.loads(sys.argv[2])])"
+    subprocess.Popen([sys.executable, "-c", code, lib, json.dumps([[w, list(r)] for w, r in items])],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def raise_group(wc, windows, prefer=None):
@@ -294,7 +329,7 @@ def cmd_layout(args):
             from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
             ent.add(wc, [m["id"] for m in get_group(wc, p[1])["members"]])
     ent.commit()
-    placed, results, settling, group_jobs = {}, [], [], []
+    placed, results, settling, group_jobs, started = {}, [], [], [], set()
     with ThreadPoolExecutor(max_workers=max(1, n)) as pool:           # 置いたあとの定着待ち（窓ごとに 0.3 秒以上）は並行して行う
         for i, (r, p) in enumerate(zip(rects, plan), 1):
             if p is None:
@@ -304,6 +339,8 @@ def cmd_layout(args):
                 group_jobs.append((i, r, pool.submit(place_group_members, wc, p[1], r)))
                 continue
             w = launch(wc, p[1]) if p[0] == "run" else p[1]           # 起動は 1 つずつ（新しい窓の見分けが混ざらないように）
+            if p[0] == "run":
+                started.add(w["id"])
             settling.append(pool.submit(place_settled, wc, w["id"], r))
             placed[i] = w
             results.append((w["id"], r, i))
@@ -324,6 +361,8 @@ def cmd_layout(args):
         time.sleep(delay)
         for wid, r, i in results:
             got_by[wid] = None if tuple(wc.rect(wid)) == tuple(r) else place_settled(wc, wid, r, tries=6)
+    # それより遅れて動かすアプリのために、起動した窓だけ、あとで WATCH_SECONDS 秒見張る
+    spawn_watch([(wid, r) for wid, r, i in results if wid in started])
     for wid, r, i in results:
         got = got_by.get(wid)
         if got:

@@ -17,7 +17,7 @@ from .shortcuts import WIN_BIN
 from .dbus import find_windows, focused, normal_windows, selector_for, usable_windows
 from .store import icon_widget
 from .pickwin import ask_line
-from .placement import apply_one, describe, launch, raise_group
+from .placement import apply_one, describe, launch, raise_group, spawn_watch
 from .textui import ascii_map, set_current, start_placeholders, stop_placeholders
 from .sets import monitors_for_preview
 from .prompt import run_with_ascii_input
@@ -537,6 +537,8 @@ def interactive(wc, args, expr, rects, area):
             raise_group(wc, [a[0] for a in assigned if a], me["id"])
         except WinError:
             pass
+        # 起動した窓は、アプリ自身が遅れて大きさを戻すことがあるので、最終的に置かれたタイルの枠で、あとで見張る
+        spawn_watch([(a[0]["id"], rects[k]) for k, a in enumerate(assigned) if a and a[1].startswith("!")])
     toks = [shlex.quote(a[1]) if a else "-" for a in assigned]
     while toks and toks[-1] == "-":
         toks.pop()
