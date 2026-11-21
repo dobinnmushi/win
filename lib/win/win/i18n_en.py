@@ -556,7 +556,7 @@ EN = {
     " ・ Esc 取り消す":
         " · Esc cancel",
     "文字で絞り込み　先頭に！でアプリを探して新規起動":
-        "Type to filter a leading ! searches for an app and launches it",
+        "Type to filter · start with ! to search and launch an app",
     "↑↓ 選択 ・ Enter 決定":
         "↑↓ select · Enter confirm",
     " ・ 先頭 ! でアプリを探して新しく起動":
@@ -710,7 +710,7 @@ EN = {
     "グループ {0} のメンバーは 1 枚だけです":
         "Group {0} has only one member",
     "文字で絞り込み　先頭に ! でアプリを探して新規起動":
-        "Type to filter a leading ! searches for an app and launches it",
+        "Type to filter · start with ! to search and launch an app",
     "↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 ・ Ctrl+S 空ける ・ Ctrl+B 戻る ・ Esc 終了":
         "↑↓ select · Enter confirm · Tab confirm and fill the rest · Ctrl+S leave empty · Ctrl+B back · Esc quit",
     "型の名前で絞り込み（式も打てます: 1,2,2・1/1・v(1,h(1,1)) など）":
@@ -896,7 +896,7 @@ EN = {
     "タイル {0}: {1}":
         "Tile {0}: {1}",
     "選んだ窓を今の窓と同じ位置・大きさにして前面へ":
-        "Give the chosen window the same position and size as the current window, and bring it to the front",
+        "Put the chosen window where the current one is",
     "選んだ窓を、置き先（番号のタイル・空き）に重ねる":
         "Stack the chosen window on a destination (a numbered tile, free space)",
     "重なった窓の層を切り替える":
