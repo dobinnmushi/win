@@ -20,7 +20,9 @@
 - 済: README（英・日）・`install.sh`・`uninstall.sh`・MIT の LICENSE。
 - 済: スクリーンショット 2 枚（README）、設計メモの構成の更新、設定窓の拡張ソースを開く操作（ptyxis と nvim が無いときは、画面で知らせる）。
 - 済: 英語の画面（`tr()` と `i18n_en.py`。643 個の鍵のうち 641 個。nvim の Lua は除く）。設計は `docs/design.md` の 4.4b。
-- 残: 公開の判断、README の英語版のスクリーンショット。
+- 済: README の英語版のスクリーンショット。
+- **公開済み（2026-11-21）**: https://github.com/dobinnmushi/win（public・MIT・pre-release v0.1.0）。個人設定は公開せず、`win-config`（非公開）に置く。
+- 残: 反応を見て、ほかの GNOME・ディストリビューションでの確認、CI、コメント・設計メモの英語化を検討する。
 
 ### 切り分けのために足すもの（案）
 1. **宣言的なショートカット設定**: `~/.config/win/shortcuts.toml`（個人のファイル）と `win shortcuts apply|export`。いまは割り当てが dconf だけにあるので、再インストールで失われる。標準の割り当て（`Super+Alt+◯` 29 個は keyd の変換レイヤーを前提にした個人向けの選択）は、**既定を未割り当て**にし、**プリセット**（`presets/super-alt.toml` など）として同梱する。
