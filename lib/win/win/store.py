@@ -10,6 +10,7 @@ from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import WinError
+from .i18n import tr
 from .shortcuts import WIN_BIN, command_slug, kb_list, kb_remove, kb_set, set_slug
 
 
@@ -20,7 +21,7 @@ APPS = os.environ.get("WIN_APPS") or os.path.join(os.path.dirname(COMMANDS), "ap
 SETS = os.environ.get("WIN_SETS") or os.path.join(os.path.dirname(COMMANDS), "sets.toml")
 
 
-TOML_HEADER = "# win config が書き換えます。手で編集してもかまいません（コメントは、保存し直すと消えます）。\n"
+TOML_HEADER = tr("# win config が書き換えます。手で編集してもかまいません（コメントは、保存し直すと消えます）。\n")
 
 
 def _toml_key(k):
@@ -36,7 +37,7 @@ def _toml_val(v):
         return json.dumps(v, ensure_ascii=False)
     if isinstance(v, list):
         return "[" + ", ".join(_toml_val(x) for x in v) + "]"
-    raise TypeError(f"TOML にできない値: {v!r}")
+    raise TypeError(tr("TOML にできない値: {0!r}").format(v))
 
 
 def _is_aot(v):
@@ -78,7 +79,7 @@ def _load_table(path, key):
     except FileNotFoundError:
         return {}
     except tomllib.TOMLDecodeError as e:
-        raise WinError(f"{path} が読めません: {e}")
+        raise WinError(tr("{0} が読めません: {1}").format(path, e))
 
 
 def load_commands():
@@ -139,16 +140,16 @@ def _check_win_one(line):
     try:
         argv = shlex.split(line)
     except ValueError as e:
-        return f"引用符が閉じていません: {e}"
+        return tr("引用符が閉じていません: {0}").format(e)
     if argv and argv[0] == "win":
         argv = argv[1:]
     if not argv:
-        return "命令が空です"
+        return tr("命令が空です")
     if argv[0] in ("run", "config", "set"):
-        return f"「{argv[0]}」は、コマンドの中では使えません（無限に呼び合うのを防ぐため）"
+        return tr("「{0}」は、コマンドの中では使えません（無限に呼び合うのを防ぐため）").format(argv[0])
     load_extensions()
     if argv[0] not in {c for c, _ in SUBCOMMANDS} | {"prompt"} | set(EXT):
-        return f"知らない命令です: {argv[0]}"
+        return tr("知らない命令です: {0}").format(argv[0])
     return None
 
 
@@ -156,65 +157,65 @@ def check_win_line(text):
     """win の命令（複数行可）として正しいか。問題があれば説明、なければ None。"""
     lines = win_lines(text)
     if not lines:
-        return "命令が空です"
+        return tr("命令が空です")
     for i, line in enumerate(lines, 1):
         err = _check_win_one(line)
         if err:
-            return f"{i} 行目: {err}" if len(lines) > 1 else err
+            return tr("{0} 行目: {1}").format(i, err) if len(lines) > 1 else err
     return None
 
 
 # 各命令の書式（打っている途中の引数の説明に使う）: 命令 → (書式の部品, {部品: 説明})。
 # 部品は ("位置", 名前) か ("opt", "-w") のような印。位置の部品は順に対応し、最後が [窓 …] のように繰り返すものは "rep"。
-WIN_OPT = ("opt", "-w", "窓", "対象の窓（クラス・題名の一部、@left・@prev など）。省くと前面の窓")
+WIN_OPT = ("opt", "-w", tr("窓"), tr("対象の窓（クラス・題名の一部、@left・@prev など）。省くと前面の窓"))
 
 
-MONITOR_HELP = "基準にするモニタ（primary・current・eDP-1 など）。省くと、いまの窓があるモニタ"
+MONITOR_HELP = tr("基準にするモニタ（primary・current・eDP-1 など）。省くと、いまの窓があるモニタ")
 
 
-MON_OPT = ("opt", "--monitor", "画面", "基準のモニタ（primary・current・eDP-1 など）。省くと、いまの窓があるモニタ")
+MON_OPT = ("opt", "--monitor", tr("画面"), tr("基準のモニタ（primary・current・eDP-1 など）。省くと、いまの窓があるモニタ"))
 
 
 SIGNATURES = {
-    "here": ([("pos", "窓", "窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ", True), MON_OPT], "選んだ窓を今の窓と同じ位置・大きさにして前面へ"),
-    "shortcuts": ([("pos", "動作", "list（既定）・export・apply", True), ("pos", "ファイル", "shortcuts.toml のパス", True), ("flag", "--dry-run", "apply: 反映せず、変える内容だけ表示"),
-                   ("flag", "--prune", "apply: ファイルにない win-* の項目を消す")], "ショートカットの宣言的な設定（export・apply）"),
-    "send": ([("pos", "送り先", "next（既定）・prev・primary・モニタの接続名", True), WIN_OPT], "前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ）"),
-    "undo": ([("pos", "対象", "list で記録の一覧。省くと直前の操作を戻す", True)], "直前の操作（layout・place・here・group・set・send）を元に戻す"),
-    "stats": ([("pos", "対象", "日数（既定 30）・on・off・reset・path", True)], "使用の集計。on・off で記録を入れ・切り、reset で消す"),
-    "group": ([("pos", "動作", "list（既定）・new・define・add・remove・delete・next・prev・show・select・place・from-stack", True),
-               ("rep", "引数", "名前・窓の指定・タイルの番号（動作による）。名前を省くと、前面の窓の属するグループ", True), MON_OPT],
-              "窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）"),
-    "desktop": ([("pos", "デスクトップ", "デスクトップの番号（1 から）・next・prev・list。省くと、いまのデスクトップを表示", True)],
-                "デスクトップ（ワークスペース）の表示・切り替え。切り替えには拡張 win-helper@local が要る"),
-    "stack": ([("pos", "動作", "next（次の層、既定）・prev（前の層）・list（小窓で選ぶ）。タイルの番号と、どちらの順でもよい", True),
-               ("pos", "タイル", "タイルの番号（0 は前面の窓のいるタイル）", True), MON_OPT],
-              "同じ位置に重なった窓（層）を、次・前へ切り替える"),
-    "place": ([("pos", "置き先", "タイルの番号（0 は前面の窓の位置）か free（いちばん広い空きスペース）", True),
-               ("pos", "窓", "置く窓（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ。小窓では ←→ で置き先を動かせる", True),
-               ("flag", "--min", "置き先にあった元の窓を最小化する"), MON_OPT], "置き先（番号のタイル・前面の窓・空きスペース）に、選んだ窓を重ねる"),
-    "focus": ([("pos", "窓", "窓の指定（クラス・題名の一部）か、5 桁以上の ID", False)], "窓を前面に出す"),
-    "nav": ([("pos", "方向", "next / prev（いまの並びの番号順）、left / right / up / down", False)], "フォーカスを次・前・上下左右の窓へ移す"),
-    "layout": ([("pos", "型", "型の名前（win layouts）か式（例: v(1,h(1,1))。略記 1,2:1/1/1,1 も可）。省くと小窓で選ぶ", True),
-                ("rep", "窓", "タイル順の窓。- は空け、!コマンド は新しく起動", True),
-                ("opt", "--gap", "隙間", "タイル間の隙間（px）"), ("flag", "-n", "動かさず、割り当てだけ表示"),
-                ("flag", "--pick", "タイルごとに窓の一覧を自動で出す"), ("flag", "-i", "タイルごとに窓を絞り込んで選ぶ"), MON_OPT],
-               "窓を分割配置する"),
-    "pick": ([("flag", "--id", "前面に出さず、選んだ窓の ID だけを表示"), MON_OPT], "窓の一覧から選んで前面に出す"),
-    "move": ([WIN_OPT, ("pos", "x", "左端の位置（px）", False), ("pos", "y", "上端の位置（px）", False)], "窓を移動する"),
-    "size": ([WIN_OPT, ("pos", "幅", "幅（px）", False), ("pos", "高さ", "高さ（px）", False)], "窓の大きさを変える"),
-    "state": ([WIN_OPT, ("pos", "動作", "max / unmax / min / unmin / above / unabove", False)], "最大化・最小化・常に手前"),
-    "max": ([WIN_OPT], "窓を最大化する"), "unmax": ([WIN_OPT], "最大化を戻す"),
-    "min": ([WIN_OPT], "窓を最小化する"), "unmin": ([WIN_OPT], "最小化を戻す"), "close": ([WIN_OPT], "窓を閉じる"),
-    "list": ([("flag", "-a", "通常の窓以外も表示")], "窓の一覧を表示する"),
-    "layouts": ([], "型の一覧を表示する"),
-    "run": ([("pos", "名前", "登録したコマンド・保存した並び", False)], "登録したコマンドを実行する"),
-    "save": ([("pos", "名前", "保存する名前（win set 名前 で呼べる）", False),
-              ("opt", "--state", "状態", "firefox / terminal / all。タブの URL・作業ディレクトリも保存（選んだときだけ）"), MON_OPT],
-             "いまの窓の並びを、型と窓の列として保存する"),
-    "term": ([("rep", "作業ディレクトリ", "タブごとの作業ディレクトリ", True)], "端末をタブつきで開く"),
-    "browse": ([("rep", "URL", "開く URL（最初の 1 つで窓を開き、残りはタブ）", False)], "Firefox を URL のタブつきで開く"),
-    "set": ([("pos", "名前", "セットの名前。省くと、絞り込みの小窓が開く", True), MON_OPT], "保存した並び（セット）を適用する"),
+    "here": ([("pos", tr("窓"), tr("窓の指定（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ"), True), MON_OPT], tr("選んだ窓を今の窓と同じ位置・大きさにして前面へ")),
+    "shortcuts": ([("pos", tr("動作"), tr("list（既定）・export・apply"), True), ("pos", tr("ファイル"), tr("shortcuts.toml のパス"), True), ("flag", "--dry-run", tr("apply: 反映せず、変える内容だけ表示")),
+                   ("flag", "--prune", tr("apply: ファイルにない win-* の項目を消す"))], tr("ショートカットの宣言的な設定（export・apply）")),
+    "send": ([("pos", tr("送り先"), tr("next（既定）・prev・primary・モニタの接続名"), True), WIN_OPT], tr("前面の窓を、別のモニタへ送る（位置と大きさの割合を保つ）")),
+    "undo": ([("pos", tr("対象"), tr("list で記録の一覧。省くと直前の操作を戻す"), True)], tr("直前の操作（layout・place・here・group・set・send）を元に戻す")),
+    "stats": ([("pos", tr("対象"), tr("日数（既定 30）・on・off・reset・path"), True)], tr("使用の集計。on・off で記録を入れ・切り、reset で消す")),
+    "group": ([("pos", tr("動作"), tr("list（既定）・new・define・add・remove・delete・next・prev・show・select・place・from-stack"), True),
+               ("rep", tr("引数"), tr("名前・窓の指定・タイルの番号（動作による）。名前を省くと、前面の窓の属するグループ"), True), MON_OPT],
+              tr("窓のグループ（名前つき・保存つき。1 つの枠を共有し、タブのように切り替える）")),
+    "desktop": ([("pos", tr("デスクトップ"), tr("デスクトップの番号（1 から）・next・prev・list。省くと、いまのデスクトップを表示"), True)],
+                tr("デスクトップ（ワークスペース）の表示・切り替え。切り替えには拡張 win-helper@local が要る")),
+    "stack": ([("pos", tr("動作"), tr("next（次の層、既定）・prev（前の層）・list（小窓で選ぶ）。タイルの番号と、どちらの順でもよい"), True),
+               ("pos", tr("タイル"), tr("タイルの番号（0 は前面の窓のいるタイル）"), True), MON_OPT],
+              tr("同じ位置に重なった窓（層）を、次・前へ切り替える")),
+    "place": ([("pos", tr("置き先"), tr("タイルの番号（0 は前面の窓の位置）か free（いちばん広い空きスペース）"), True),
+               ("pos", tr("窓"), tr("置く窓（クラス・題名の一部）か !コマンド。省くと小窓で選ぶ。小窓では ←→ で置き先を動かせる"), True),
+               ("flag", "--min", tr("置き先にあった元の窓を最小化する")), MON_OPT], tr("置き先（番号のタイル・前面の窓・空きスペース）に、選んだ窓を重ねる")),
+    "focus": ([("pos", tr("窓"), tr("窓の指定（クラス・題名の一部）か、5 桁以上の ID"), False)], tr("窓を前面に出す")),
+    "nav": ([("pos", tr("方向"), tr("next / prev（いまの並びの番号順）、left / right / up / down"), False)], tr("フォーカスを次・前・上下左右の窓へ移す")),
+    "layout": ([("pos", tr("型"), tr("型の名前（win layouts）か式（例: v(1,h(1,1))。略記 1,2:1/1/1,1 も可）。省くと小窓で選ぶ"), True),
+                ("rep", tr("窓"), tr("タイル順の窓。- は空け、!コマンド は新しく起動"), True),
+                ("opt", "--gap", tr("隙間"), tr("タイル間の隙間（px）")), ("flag", "-n", tr("動かさず、割り当てだけ表示")),
+                ("flag", "--pick", tr("タイルごとに窓の一覧を自動で出す")), ("flag", "-i", tr("タイルごとに窓を絞り込んで選ぶ")), MON_OPT],
+               tr("窓を分割配置する")),
+    "pick": ([("flag", "--id", tr("前面に出さず、選んだ窓の ID だけを表示")), MON_OPT], tr("窓の一覧から選んで前面に出す")),
+    "move": ([WIN_OPT, ("pos", "x", tr("左端の位置（px）"), False), ("pos", "y", tr("上端の位置（px）"), False)], tr("窓を移動する")),
+    "size": ([WIN_OPT, ("pos", tr("幅"), tr("幅（px）"), False), ("pos", tr("高さ"), tr("高さ（px）"), False)], tr("窓の大きさを変える")),
+    "state": ([WIN_OPT, ("pos", tr("動作"), "max / unmax / min / unmin / above / unabove", False)], tr("最大化・最小化・常に手前")),
+    "max": ([WIN_OPT], tr("窓を最大化する")), "unmax": ([WIN_OPT], tr("最大化を戻す")),
+    "min": ([WIN_OPT], tr("窓を最小化する")), "unmin": ([WIN_OPT], tr("最小化を戻す")), "close": ([WIN_OPT], tr("窓を閉じる")),
+    "list": ([("flag", "-a", tr("通常の窓以外も表示"))], tr("窓の一覧を表示する")),
+    "layouts": ([], tr("型の一覧を表示する")),
+    "run": ([("pos", tr("名前"), tr("登録したコマンド・保存した並び"), False)], tr("登録したコマンドを実行する")),
+    "save": ([("pos", tr("名前"), tr("保存する名前（win set 名前 で呼べる）"), False),
+              ("opt", "--state", tr("状態"), tr("firefox / terminal / all。タブの URL・作業ディレクトリも保存（選んだときだけ）")), MON_OPT],
+             tr("いまの窓の並びを、型と窓の列として保存する")),
+    "term": ([("rep", tr("作業ディレクトリ"), tr("タブごとの作業ディレクトリ"), True)], tr("端末をタブつきで開く")),
+    "browse": ([("rep", "URL", tr("開く URL（最初の 1 つで窓を開き、残りはタブ）"), False)], tr("Firefox を URL のタブつきで開く")),
+    "set": ([("pos", tr("名前"), tr("セットの名前。省くと、絞り込みの小窓が開く"), True), MON_OPT], tr("保存した並び（セット）を適用する")),
 }
 
 
@@ -288,7 +289,7 @@ def skip_flag_value(done, opt_value):
 def describe_command(c):
     t = c.get("type", "win")
     if t == "arrange":
-        return f"並び {len(c.get('windows', []))} 枚"
+        return tr("並び {0} 枚").format(len(c.get('windows', [])))
     run = c.get("run", "")
     if t == "win":
         return " → ".join(win_lines(run))                 # 複数行は「→」でつなぐ（コメント行は除く）

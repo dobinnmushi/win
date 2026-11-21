@@ -4,6 +4,7 @@ import sys
 import time
 
 from .common import WinError
+from .i18n import tr
 from .screen import default_screen, find_screen, load_config, work_area
 from .dbus import WindowCalls, find_windows, focused, normal_windows, targets
 from .store import icon_for_class, launch_for_class
@@ -18,14 +19,14 @@ from .dialog import Dialog, Item, Map, choose
 from .configwin import run_config
 
 
-HERE_HINT = "↑↓ 選択 ・ ←→ 置き先を動かす（空きスペースにも） ・ Enter 決定（置き先と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる"
+HERE_HINT = tr("↑↓ 選択 ・ ←→ 置き先を動かす（空きスペースにも） ・ Enter 決定（置き先と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる")
 
 
 def window_row_title(w, d):
     """窓の候補の表示名（最小化・別のワークスペースの印つき）。"""
     t = (w.get("title") or "")[:90]
     if d.get("minimized"):
-        t += "  （最小化）"
+        t += tr("  （最小化）")
     if not w.get("in_current_workspace"):
         t += f"  [WS {w.get('workspace', 0) + 1}]"
     return t
@@ -44,7 +45,7 @@ def bring_here(wc, w, rect, maximized, workspace, activate=True):
     else:
         got = place_settled(wc, w["id"], rect)
         if got:
-            notice = f"希望の大きさにならず {got[2]}x{got[3]} です（最小サイズなど）"
+            notice = tr("希望の大きさにならず {0}x{1} です（最小サイズなど）").format(got[2], got[3])
     if activate:
         wc.simple("Activate", w["id"])
     return notice
@@ -118,13 +119,13 @@ def place_targets(wc, front, add_front, exclude=(), screen=None):
         d = wc.details(front["id"])
         bx, by = max(0.0, (d["x"] - ax) / aw), max(0.0, (d["y"] - ay) / ah)
         targets.append({"id": front["id"], "norm": (bx, by, min(1.0 - bx, d["width"] / aw), min(1.0 - by, d["height"] / ah)),
-                        "label": "ここ"})
+                        "label": tr("ここ")})
         index = len(targets) - 1
     for x, y, w, h in free_rects(wc, exclude, screen):
         targets.append({"id": None, "free": True, "abs": (x, y, w, h), "norm": ((x - ax) / aw, (y - ay) / ah, w / aw, h / ah),
-                        "label": "空き"})
+                        "label": tr("空き")})
     if not targets:
-        targets = [{"id": None, "free": True, "abs": (ax, ay, aw, ah), "norm": (0.0, 0.0, 1.0, 1.0), "label": "空き"}]
+        targets = [{"id": None, "free": True, "abs": (ax, ay, aw, ah), "norm": (0.0, 0.0, 1.0, 1.0), "label": tr("空き")}]
     for t in targets:
         x, y, w, h = t["norm"]
         t["c"] = (ax + (x + w / 2) * aw, ay + (y + h / 2) * ah)
@@ -154,16 +155,16 @@ def place_move(wc, front, screen, targets, index, d):
 
 def place_initial(targets, index, n):
     """n（0＝前面の窓のタイル、1 以上＝その番号のタイル、"free"＝いちばん広い空き）が指す最初の置き先の添字。"""
-    tiles = [k for k, t in enumerate(targets) if not t.get("free") and t["label"] != "ここ"]
+    tiles = [k for k, t in enumerate(targets) if not t.get("free") and t["label"] != tr("ここ")]
     if n == "free":
         k = next((k for k, t in enumerate(targets) if t.get("free")), None)         # 空きは広い順に並んでいる
         if k is None:
-            raise WinError("空きスペースがありません")
+            raise WinError(tr("空きスペースがありません"))
         return k
     if n == 0:
         return index if index is not None else 0
     if not 1 <= n <= len(tiles):
-        raise WinError(f"タイル {n} がありません（いまの並びのタイルは {len(tiles)} 枚）")
+        raise WinError(tr("タイル {0} がありません（いまの並びのタイルは {1} 枚）").format(n, len(tiles)))
     return tiles[n - 1]
 
 
@@ -196,7 +197,7 @@ def cmd_place(args):
         try:
             n = int(n)
         except ValueError:
-            raise WinError(f"置き先は、タイルの番号（0 は前面の窓）か free です: {args.n}")
+            raise WinError(tr("置き先は、タイルの番号（0 は前面の窓）か free です: {0}").format(args.n))
     screen = default_screen()
     targets, fidx = place_targets(wc, front, True, screen=screen)
     index = place_initial(targets, fidx, n)
@@ -208,7 +209,7 @@ def cmd_place(args):
         else:
             found = find_windows(wc, args.window, cands)
             if not found:
-                raise WinError(f"窓が見つかりません: {args.window}")
+                raise WinError(tr("窓が見つかりません: {0}").format(args.window))
             w = found[0]
         if n == "free":                       # 置く窓がもともと空きに重なっていたら、その分を除いて空きを取り直す
             targets, _ = place_targets(wc, front, True, exclude=(w["id"],), screen=screen)
@@ -227,32 +228,32 @@ def cmd_stack(args):
     acts = [x for x in words if x in ("next", "prev", "list")]
     nums = [x for x in words if x not in ("next", "prev", "list")]
     if len(acts) > 1 or len(nums) > 1:
-        raise WinError("書式: win stack [next|prev|list] [タイルの番号]（番号は 0 なら前面の窓のいるタイル）")
+        raise WinError(tr("書式: win stack [next|prev|list] [タイルの番号]（番号は 0 なら前面の窓のいるタイル）"))
     action = acts[0] if acts else "next"
     try:
         n = int(nums[0]) if nums else 0
     except ValueError:
-        raise WinError(f"タイルの番号か 0（前面の窓のいるタイル）を指定してください: {nums[0]}")
+        raise WinError(tr("タイルの番号か 0（前面の窓のいるタイル）を指定してください: {0}").format(nums[0]))
     if action in ("next", "prev"):
         st, w = cycle_stack(wc, n, 1 if action == "next" else -1)
         k = [x["id"] for x in st["layers"]].index(w["id"]) + 1
-        print(f"タイル {st['index']}: 層 {k}/{len(st['layers'])}  {describe_window(w)}")
+        print(tr("タイル {0}: 層 {1}/{2}  {3}").format(st['index'], k, len(st['layers']), describe_window(w)))
         return 0
     stacks = tile_stacks(wc)
     st = find_stack(wc, n, stacks)
     layers = st["layers"]
     if len(layers) < 2:
-        raise WinError(f"タイル {st['index']} に重なりはありません（窓は 1 枚）")
+        raise WinError(tr("タイル {0} に重なりはありません（窓は 1 枚）").format(st['index']))
     ids = [w["id"] for w in layers]
     i0 = ids.index(st["top"])
     order = layers[i0:] + layers[:i0]                          # いま手前の層を先頭に、巡回の順に並べる
     ax, ay, aw, ah = work_area(load_config())
     rects = [((s["rect"][0] - ax) / aw, (s["rect"][1] - ay) / ah, s["rect"][2] / aw, s["rect"][3] / ah) for s in stacks]
-    m = Map(rects, [f"{len(s['layers'])}枚" if len(s["layers"]) > 1 else "" for s in stacks], stacks.index(st),
+    m = Map(rects, [tr("{0}枚").format(len(s['layers'])) if len(s["layers"]) > 1 else "" for s in stacks], stacks.index(st),
             monitor=monitors_for_preview(load_config())[1])
     items = [Item(f"{k}. " + window_row_title(w, wc.details(w["id"])), w.get("wm_class") or "", icon_for_class(w.get("wm_class")), w)
              for k, w in ((ids.index(w["id"]) + 1, w) for w in order)]
-    sel = choose(f"タイル {st['index']} の重なり（{len(layers)} 層）", items, preview=lambda _it: m)
+    sel = choose(tr("タイル {0} の重なり（{1} 層）").format(st['index'], len(layers)), items, preview=lambda _it: m)
     if sel is None:
         return 1
     time.sleep(0.2)                                            # 小窓が閉じて、フォーカスが戻るのを待ってから前面に出す
@@ -271,7 +272,7 @@ def _windows_from(wc, specs):
     for sel in specs:
         found = find_windows(wc, sel, pool)
         if not found:
-            raise WinError(f"窓が見つかりません: {sel}")
+            raise WinError(tr("窓が見つかりません: {0}").format(sel))
         out.append(found[0])
     return out
 
@@ -291,10 +292,10 @@ def resolve_specs(wc, specs, exclude=()):
             elif optional:
                 cmdline = fallback or launch_for_class(base)
                 if not cmdline:
-                    raise WinError(f"窓が見つからず、起動コマンドも分かりません: {base}")
+                    raise WinError(tr("窓が見つからず、起動コマンドも分かりません: {0}").format(base))
                 w = launch(wc, cmdline)
             else:
-                raise WinError(f"窓が見つかりません: {sel}")
+                raise WinError(tr("窓が見つかりません: {0}").format(sel))
         taken.add(w["id"])
         out.append(w)
     return out
@@ -307,17 +308,17 @@ def cmd_group(args):
 
     def need_name():
         if not a:
-            raise WinError(f"グループの名前を指定してください（win group {act} 名前）")
+            raise WinError(tr("グループの名前を指定してください（win group {0} 名前）").format(act))
         return a[0]
 
     if act == "list":
         data = grp.load_groups(wc)
         wins = {w["id"]: w for w in normal_windows(wc)}
         if not data:
-            print("グループはありません（作るには win group new 名前 [窓…]）")
+            print(tr("グループはありません（作るには win group new 名前 [窓…]）"))
         for name, g in data.items():
             r = g.get("rect")
-            print(f"グループ {name}" + (f"（枠 {r[0]},{r[1]} {r[2]}x{r[3]}）" if r else "") + f"  {len(g['members'])} 枚")
+            print(tr("グループ {0}").format(name) + (tr("（枠 {0},{1} {2}x{3}）").format(r[0], r[1], r[2], r[3]) if r else "") + tr("  {0} 枚").format(len(g['members'])))
             for k, m in enumerate(g["members"], 1):
                 print(f"  {'*' if m['id'] == g['active'] else ' '} {k}. {describe_window(wins[m['id']])}")
         return 0
@@ -327,31 +328,31 @@ def cmd_group(args):
         if act == "new":
             grp.create_group(wc, name, wins)
             notes = []
-            print(f"グループ {name} を作りました（{len(wins)} 枚）")
+            print(tr("グループ {0} を作りました（{1} 枚）").format(name, len(wins)))
         else:
             notes = grp.add_members(wc, name, wins)
-            print(f"グループ {name} に {len(wins)} 枚を足しました")
+            print(tr("グループ {0} に {1} 枚を足しました").format(name, len(wins)))
     elif act == "define":
         name = need_name()
         if len(a) < 2:
-            raise WinError("窓の指定が要ります（win group define 名前 窓の指定…）")
+            raise WinError(tr("窓の指定が要ります（win group define 名前 窓の指定…）"))
         others = {m["id"] for n, g in grp.load_groups(wc).items() if n != name for m in g["members"]}      # ほかのグループのメンバーは拾わない
         wins = resolve_specs(wc, a[1:], others)
         grp.define_group(wc, name, wins)
-        print(f"グループ {name} を定義しました（{len(wins)} 枚）")
+        print(tr("グループ {0} を定義しました（{1} 枚）").format(name, len(wins)))
         return 0
     elif act == "remove":
         n = grp.remove_members(wc, _windows_from(wc, a))
-        print(f"{n} 枚をグループから外しました")
+        print(tr("{0} 枚をグループから外しました").format(n))
         return 0
     elif act == "delete":
         grp.delete_group(wc, need_name())
-        print(f"グループ {a[0]} を消しました（窓は閉じません）")
+        print(tr("グループ {0} を消しました（窓は閉じません）").format(a[0]))
         return 0
     elif act in ("next", "prev"):
         name = grp.resolve_name(wc, a[0] if a else None)
         w, k, n = grp.cycle_group(wc, name, 1 if act == "next" else -1)
-        print(f"グループ {name}: {k}/{n}  {describe_window(w)}")
+        print(tr("グループ {0}: {1}/{2}  {3}").format(name, k, n, describe_window(w)))
         return 0
     elif act == "show":
         notes = grp.show_group(wc, grp.resolve_name(wc, a[0] if a else None))
@@ -362,7 +363,7 @@ def cmd_group(args):
         ids = [m["id"] for m in g["members"]]
         i0 = ids.index(g["active"]) if g["active"] in ids else 0
         order = ids[i0:] + ids[:i0]                        # いま手前のメンバーを先頭に、巡回の順に並べる
-        sel = choose(f"グループ {name}（{len(ids)} 枚）",
+        sel = choose(tr("グループ {0}（{1} 枚）").format(name, len(ids)),
                      [Item(f"{ids.index(i) + 1}. " + window_row_title(wins[i], wc.details(i)), wins[i].get("wm_class") or "",
                            icon_for_class(wins[i].get("wm_class")), wins[i]) for i in order])
         if sel is None:
@@ -386,9 +387,9 @@ def cmd_group(args):
         n = int(a[0]) if a else 0
         name = grp.group_from_stack(wc, n, a[1] if len(a) > 1 else None)
         notes = []
-        print(f"重なりからグループ {name} を作りました")
+        print(tr("重なりからグループ {0} を作りました").format(name))
     else:
-        raise WinError(f"知らない動作です: {act}")
+        raise WinError(tr("知らない動作です: {0}").format(act))
     for note in notes:
         print(note, file=sys.stderr)
     return 0
@@ -413,8 +414,8 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
     def show(d, notice=""):
         """いまの置き先に合わせて、題名・候補の窓（置き先の窓自身は除く）・地図を渡す。"""
         t = targets[index]
-        d.title = ("ここに持ってくる" if t["id"] == front["id"] else
-                   "空きスペースに持ってくる" if t.get("free") else f"タイル {index + 1}（{t['label']}）に持ってくる")
+        d.title = (tr("ここに持ってくる") if t["id"] == front["id"] else
+                   tr("空きスペースに持ってくる") if t.get("free") else tr("タイル {0}（{1}）に持ってくる").format((index + 1), t['label']))
         d.rows([Item(window_row_title(w, wc.details(w["id"])), w.get("wm_class") or "", icon_for_class(w.get("wm_class")), w)
                 for w in reversed(normal_windows(wc)) if w["id"] != t["id"]])
         d.map(Map([t["norm"] for t in targets], [t["label"] if n != index else "" for n, t in enumerate(targets)], index,
@@ -422,7 +423,7 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
         d.notice(notice)
 
     chosen, placed = None, False
-    with Dialog(hint=HERE_HINT, launch=True, keys=("Left", "Right"), chip="開いている窓", window_title="窓を並べる", placeholder="文字で絞り込み　先頭に！でアプリを探して新規起動",
+    with Dialog(hint=HERE_HINT, launch=True, keys=("Left", "Right"), chip=tr("開いている窓"), window_title=tr("窓を並べる"), placeholder=tr("文字で絞り込み　先頭に！でアプリを探して新規起動"),
                 screen=screen) as d:
         show(d)
         for ev in d.events():
@@ -430,7 +431,7 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
                 moved = place_move(wc, front, screen, targets, index, 1 if ev.key == "Right" else -1)
                 if moved:
                     screen, targets, index = moved
-                show(d, "" if moved else "その向きに置き先はありません")
+                show(d, "" if moved else tr("その向きに置き先はありません"))
             elif ev.kind == "select":
                 chosen = ev.item.value
                 break
@@ -446,7 +447,7 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
     if placed:
         return 0
     if not any(w["id"] == chosen["id"] for w in normal_windows(wc)):
-        raise WinError("その窓はもう閉じられました")
+        raise WinError(tr("その窓はもう閉じられました"))
     time.sleep(0.2)                          # 小窓が閉じて、フォーカスが戻るのを待ってから動かす
     notice = place_apply(wc, front, targets, index, chosen, minimize)
     if notice:
@@ -463,8 +464,8 @@ def cmd_pick(args):
     wc = WindowCalls()
     pool = list(reversed(normal_windows(wc)))
     if not pool:
-        raise WinError("窓がありません")
-    res = pick_rows(wc, pool, [], "窓を選ぶ")
+        raise WinError(tr("窓がありません"))
+    res = pick_rows(wc, pool, [], tr("窓を選ぶ"))
     if res is None:
         return 1
     if args.id:

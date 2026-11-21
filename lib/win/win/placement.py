@@ -11,6 +11,7 @@ import sys
 import time
 
 from .common import WinError
+from .i18n import tr
 from .screen import default_screen, find_screen, load_config
 from .layouts import compute_rects, resolve_layout
 from .shortcuts import WIN_BIN
@@ -86,7 +87,7 @@ def wait_new_window(wc, before, timeout, what):
             time.sleep(0.08)    # 同時に出た窓があれば拾う程度に待つ。長く待つと、アプリが決めた位置（別のモニタのことも）に窓が見え続ける
             return [w for w in normal_windows(wc) if w["id"] not in before][-1]   # 移した後に大きさや位置を戻すアプリは、place_settled が確かめ直す
         time.sleep(0.03)
-    raise WinError(f"{timeout} 秒待っても新しい窓が現れませんでした: {what}")
+    raise WinError(tr("{0} 秒待っても新しい窓が現れませんでした: {1}").format(timeout, what))
 
 
 # 引数なしで起動すると、起動中のとき新しい窓を作らず既存の窓を前面に出すだけのアプリ（2 回目の起動で窓が増えないのを実機で確認したもの）。
@@ -101,7 +102,7 @@ def new_window_args(name):
     mine = load_apps().get(name, {}).get("new_window")
     if mine is not None:
         if not isinstance(mine, list) or not all(isinstance(a, str) for a in mine):
-            raise WinError(f"apps.toml の [app.{name}] new_window は、文字列のリストにしてください")
+            raise WinError(tr("apps.toml の [app.{0}] new_window は、文字列のリストにしてください").format(name))
         return list(mine)
     return list(NEW_WINDOW_APPS.get(name, []))
 
@@ -110,7 +111,7 @@ def launch(wc, cmdline, timeout=20):
     """コマンドを起動し、新しく現れた窓を返す。"""
     argv = shlex.split(cmdline)
     if not argv:
-        raise WinError("起動するコマンドが空です")
+        raise WinError(tr("起動するコマンドが空です"))
     if argv[0] == "win":                                  # PATH に win が無い環境（ショートカットなど）でも動くように
         argv = [sys.executable, WIN_BIN] + argv[1:]
     if len(argv) == 1:                                    # 引数なしは、起動中なら既存の窓を前面にするだけで窓が増えない
@@ -120,15 +121,14 @@ def launch(wc, cmdline, timeout=20):
         subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError as e:
-        raise WinError(f"起動できません: {argv[0]}: {e}")
+        raise WinError(tr("起動できません: {0}: {1}").format(argv[0], e))
     try:
         return wait_new_window(wc, before, timeout, cmdline)
     except WinError as e:
         name = os.path.basename(argv[0])
         running = subprocess.run(["pgrep", "-x", name[:15]], capture_output=True).returncode == 0
         if running:
-            raise WinError(f"{e}\n  {name} はすでに起動中です。起動中のアプリは、新しい窓を作らず既存の窓を前面に出すだけのことがあります"
-                           f"（新しい窓を作る引数が要るか確かめてください。例: ptyxis --new-window）")
+            raise WinError(tr("{0}\n  {1} はすでに起動中です。起動中のアプリは、新しい窓を作らず既存の窓を前面に出すだけのことがあります（新しい窓を作る引数が要るか確かめてください。例: ptyxis --new-window）").format(e, name))
         raise
 
 
@@ -173,7 +173,7 @@ def expand_multi(wc, sels, n):
             continue
         got = [w for w in find_windows(wc, x) if w["id"] not in used][:max(0, free)]
         if not got:
-            raise WinError(f"窓が見つかりません: {x}")
+            raise WinError(tr("窓が見つかりません: {0}").format(x))
         free -= len(got)
         used |= {w["id"] for w in got}
         out += [str(w["id"]) for w in got]
@@ -204,7 +204,7 @@ def cmd_layout(args):
             sels = sels[:-1]
         sels = expand_multi(wc, sels, n)
         if len(sels) > n:
-            raise WinError(f"タイルは {n} 枚ですが、窓の指定が {len(sels)} 個あります")
+            raise WinError(tr("タイルは {0} 枚ですが、窓の指定が {1} 個あります").format(n, len(sels)))
         pool = usable_windows(wc)
         taken = set()
         seen_groups, grouped = {}, None
@@ -213,12 +213,12 @@ def cmd_layout(args):
                 from .groups import get_group        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
                 gname = sel.split(":", 1)[1]
                 if gname in seen_groups:
-                    raise WinError(f"グループ {gname} は、タイル {seen_groups[gname]} とタイル {i + 1} の両方には置けません")
+                    raise WinError(tr("グループ {0} は、タイル {1} とタイル {2} の両方には置けません").format(gname, seen_groups[gname], (i + 1)))
                 seen_groups[gname] = i + 1
                 try:
                     taken |= {m["id"] for m in get_group(wc, gname)["members"]}
                 except WinError as e:
-                    raise WinError(f"タイル {i + 1}: {e}")
+                    raise WinError(tr("タイル {0}: {1}").format((i + 1), e))
         for i, sel in enumerate(sels):
             if sel in ("-", "_"):
                 continue
@@ -230,7 +230,7 @@ def cmd_layout(args):
                 try:
                     get_group(wc, sel.split(":", 1)[1])
                 except WinError as e:
-                    raise WinError(f"タイル {i + 1}: {e}")
+                    raise WinError(tr("タイル {0}: {1}").format((i + 1), e))
                 plan[i] = ("group", sel.split(":", 1)[1])
                 continue
             base, optional, fallback = parse_window_spec(sel)         # クラス名?＝窓がなければ起動、クラス名?コマンド＝そのコマンドで起動
@@ -242,11 +242,11 @@ def cmd_layout(args):
             if not found and optional:
                 cmdline = fallback or launch_for_class(base)
                 if not cmdline:
-                    raise WinError(f"タイル {i + 1}: 窓が見つからず、起動コマンドも分かりません: {base}")
+                    raise WinError(tr("タイル {0}: 窓が見つからず、起動コマンドも分かりません: {1}").format((i + 1), base))
                 plan[i] = ("run", cmdline)
                 continue
             if not found:
-                raise WinError(f"タイル {i + 1}: 窓が見つかりません: {sel}")
+                raise WinError(tr("タイル {0}: 窓が見つかりません: {1}").format((i + 1), sel))
             plan[i] = ("win", found[0])
             taken.add(found[0]["id"])
         # 同じ指定が複数のタイルにあるときは、各窓がいまある位置にいちばん近いタイルへ入れる
@@ -276,8 +276,8 @@ def cmd_layout(args):
             plan[i] = ("win", w)
 
     for i, (r, p) in enumerate(zip(rects, plan), 1):
-        what = "（空）" if p is None else (f"起動: {p[1]}" if p[0] == "run" else f"グループ {p[1]}" if p[0] == "group" else describe(p[1]))
-        print(f"タイル {i}: x={r[0]} y={r[1]} {r[2]}x{r[3]}  ← {what}")
+        what = tr("（空）") if p is None else (tr("起動: {0}").format(p[1]) if p[0] == "run" else tr("グループ {0}").format(p[1]) if p[0] == "group" else describe(p[1]))
+        print(tr("タイル {0}: x={1} y={2} {3}x{4}  ← {5}").format(i, r[0], r[1], r[2], r[3], what))
     if args.dry_run:
         return 0
 
@@ -314,7 +314,7 @@ def cmd_layout(args):
             placed[i] = active
             results.extend((m["id"], r, i) for m in members)
             for note in notes:
-                print(f"  注意: タイル {i}: {note}", file=sys.stderr)
+                print(tr("  注意: タイル {0}: {1}").format(i, note), file=sys.stderr)
     placed = [placed[i] for i in sorted(placed)]                      # タイルの順
     raise_group(wc, placed, me)
     # 前面に出したあとに、アプリ自身が大きさを戻すことがある（Firefox で 5px 足りなくなった例）。ずれた窓は、もう一度置き直す
@@ -327,13 +327,11 @@ def cmd_layout(args):
     for wid, r, i in results:
         got = got_by.get(wid)
         if got:
-            print(f"  注意: タイル {i} の窓は希望の大きさにならず {got[2]}x{got[3]}@({got[0]},{got[1]}) です"
-                  f"（最小サイズなど）", file=sys.stderr)
+            print(tr("  注意: タイル {0} の窓は希望の大きさにならず {1}x{2}@({3},{4}) です（最小サイズなど）").format(i, got[2], got[3], got[0], got[1]), file=sys.stderr)
     return 0
 
 
 def apply_one(wc, wid, rect, index):
     got = place_settled(wc, wid, rect)
     if got:
-        print(f"  注意: タイル {index} の窓は希望の大きさにならず "
-              f"{got[2]}x{got[3]}@({got[0]},{got[1]}) です（最小サイズなど）", file=sys.stderr)
+        print(tr("  注意: タイル {0} の窓は希望の大きさにならず {1}x{2}@({3},{4}) です（最小サイズなど）").format(index, got[2], got[3], got[0], got[1]), file=sys.stderr)

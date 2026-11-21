@@ -13,7 +13,8 @@ import tomllib
 from gi.repository import GLib
 from gi.repository import Gio
 
-from .common import BUILTIN_LAYOUTS, CONFIG, DEFAULT_INSETS, WinError
+from .common import BUILTIN_LAYOUTS, CONFIG, DEFAULT_INSETS, NameExistsError, WinError
+from .i18n import tr
 from .screen import load_config
 from .layouts import compute_rects
 from .shortcuts import ACTION_GROUPS, G_CMD, G_MOVE, G_OTHER, G_SET, JP_KEYS, WIN_ACTIONS, WIN_BIN, accel_conflicts, accel_label, accel_norm, accel_note, accel_parse, command_slug, ext_slug, kb_list, kb_remove, kb_set, scan_accelerators, set_slug
@@ -67,7 +68,7 @@ def run_config(page="shortcuts"):
 
     class ConfigWindow(Adw.ApplicationWindow):
         def __init__(self, app):
-            super().__init__(application=app, title="win の設定", default_width=1040, default_height=880)
+            super().__init__(application=app, title=tr("win の設定"), default_width=1040, default_height=880)
             self.used = {}
             css = Gtk.CssProvider()
             css.load_from_string(".tile-box { border: 1px solid alpha(currentColor, .4); border-radius: 4px; "
@@ -78,10 +79,10 @@ def run_config(page="shortcuts"):
             self.toasts = Adw.ToastOverlay()
             self.stack = Adw.ViewStack()
             self.pages = {}
-            for key, title, icon in (("shortcuts", "ショートカット", "input-keyboard-symbolic"),
-                                     ("commands", "コマンド", "utilities-terminal-symbolic"),
-                                     ("sets", "セット", "view-dual-symbolic"),
-                                     ("layouts", "型", "view-grid-symbolic")):
+            for key, title, icon in (("shortcuts", tr("ショートカット"), "input-keyboard-symbolic"),
+                                     ("commands", tr("コマンド"), "utilities-terminal-symbolic"),
+                                     ("sets", tr("セット"), "view-dual-symbolic"),
+                                     ("layouts", tr("型"), "view-grid-symbolic")):
                 box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, margin_top=18, margin_bottom=24,
                               margin_start=18, margin_end=18)
                 clamp = Adw.Clamp(maximum_size=820, child=box)
@@ -138,7 +139,7 @@ def run_config(page="shortcuts"):
 
         def confirm(self, heading, body, label, cb, destructive=True):
             d = Adw.AlertDialog(heading=heading, body=body)
-            d.add_response("cancel", "キャンセル")
+            d.add_response("cancel", tr("キャンセル"))
             d.add_response("ok", label)
             if destructive:
                 d.set_response_appearance("ok", Adw.ResponseAppearance.DESTRUCTIVE)
@@ -152,23 +153,23 @@ def run_config(page="shortcuts"):
             state = {"accel": current or "", "syncing": False}
             shown = Gtk.Label(label=accel_label(current), focusable=True)       # 開いたときのフォーカス先（文字入力ではない）
             shown.add_css_class("title-1")
-            hint = Gtk.Label(label="割り当てたいキーを、実際に押してください（Esc で取消）", wrap=True)
+            hint = Gtk.Label(label=tr("割り当てたいキーを、実際に押してください（Esc で取消）"), wrap=True)
             hint.add_css_class("dim-label")
             status = Gtk.Label(wrap=True, xalign=0, max_width_chars=60)
-            entry = plain(Adw.EntryRow, title="キーを文字で入力（例: <Super><Alt>m）")
+            entry = plain(Adw.EntryRow, title=tr("キーを文字で入力（例: <Super><Alt>m）"))
             entry.set_text(current or "")
             group = Adw.PreferencesGroup()
             group.add(entry)
             # 変換・無変換などは GNOME が先に処理して押しても届かないことがあるので、一覧からも選べるようにする
-            special = plain(Adw.ComboRow, title="日本語キーから選ぶ")
-            special.set_model(Gtk.StringList.new(["（選ばない）"] + list(JP_KEYS.values())))
+            special = plain(Adw.ComboRow, title=tr("日本語キーから選ぶ"))
+            special.set_model(Gtk.StringList.new([tr("（選ばない）")] + list(JP_KEYS.values())))
             group.add(special)
-            allow = Gtk.CheckButton(label="ほかと競合していても設定する")
-            ok = self.button("設定する", lambda: finish(state["accel"]), "suggested-action")
-            clear_b = self.button("解除する", lambda: finish(""))
-            cancel = self.button("キャンセル", lambda: dlg.close())
-            inhibit = self.button("使用中のキーも押して調べる…", lambda: do_inhibit(),
-                                  tip="GNOME の確認（ショートカットの無効化の許可）が出ます。許可すると、すでに使われているキーも押して確かめられます")
+            allow = Gtk.CheckButton(label=tr("ほかと競合していても設定する"))
+            ok = self.button(tr("設定する"), lambda: finish(state["accel"]), "suggested-action")
+            clear_b = self.button(tr("解除する"), lambda: finish(""))
+            cancel = self.button(tr("キャンセル"), lambda: dlg.close())
+            inhibit = self.button(tr("使用中のキーも押して調べる…"), lambda: do_inhibit(),
+                                  tip=tr("GNOME の確認（ショートカットの無効化の許可）が出ます。許可すると、すでに使われているキーも押して確かめられます"))
             buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END)
             for b in (clear_b, cancel, ok):
                 buttons.append(b)
@@ -189,7 +190,7 @@ def run_config(page="shortcuts"):
                 note = accel_note(accel) if accel else ""
                 lines = []
                 if conflicts:
-                    lines.append("すでに使われています: " + " ／ ".join(conflicts))
+                    lines.append(tr("すでに使われています: ") + " ／ ".join(conflicts))
                 if note:
                     lines.append(note)
                 status.set_label("\n".join(lines))
@@ -231,7 +232,7 @@ def run_config(page="shortcuts"):
                 else:
                     update("", sync=False)
                     if text:
-                        status.set_label("キーの形式が読めません（例: <Super><Alt>m）")
+                        status.set_label(tr("キーの形式が読めません（例: <Super><Alt>m）"))
                         for c in ("error", "warning"):
                             status.remove_css_class(c)
                         status.add_css_class("warning")
@@ -284,7 +285,7 @@ def run_config(page="shortcuts"):
 
         def set_binding(self, slug, name, command, accel):
             kb_set(slug, name=name, command=command, binding=accel)
-            self.toast("キーを解除しました" if not accel else f"{accel_label(accel)} に設定しました（反映まで数秒かかることがあります）")
+            self.toast(tr("キーを解除しました") if not accel else tr("{0} に設定しました（反映まで数秒かかることがあります）").format(accel_label(accel)))
             self.refresh()
 
         def shortcut_row(self, slug, title, subtitle, current, name, command, deletable=False,
@@ -292,17 +293,17 @@ def run_config(page="shortcuts"):
             row = plain(Adw.ActionRow, title=title, subtitle=subtitle)
             row.set_subtitle_lines(1)
             btns = [self.key_label(current),
-                    self.button("変更", lambda: self.capture_key(title, current, slug,
+                    self.button(tr("変更"), lambda: self.capture_key(title, current, slug,
                                 lambda a: self.set_binding(slug, name, command, a)))]
             if current:
                 btns.append(self.icon_button("edit-clear-symbolic",
-                            lambda: self.set_binding(slug, name, command, ""), "キーを解除"))
+                            lambda: self.set_binding(slug, name, command, ""), tr("キーを解除")))
             if editable:
-                btns.append(self.icon_button("document-edit-symbolic", lambda: self.shortcut_form(slug), "名前とコマンドを編集"))
+                btns.append(self.icon_button("document-edit-symbolic", lambda: self.shortcut_form(slug), tr("名前とコマンドを編集")))
             if deletable:
                 btns.append(self.icon_button("user-trash-symbolic", lambda: self.confirm(
-                    "このショートカットを削除しますか？", f"「{title}」を削除します。", "削除",
-                    lambda: (kb_remove(slug), self.toast("削除しました"), self.refresh())), "削除"))
+                    tr("このショートカットを削除しますか？"), tr("「{0}」を削除します。").format(title), tr("削除"),
+                    lambda: (kb_remove(slug), self.toast(tr("削除しました")), self.refresh())), tr("削除")))
             if kind:                                      # 組み込み・拡張・コマンド・セットの別（小さな印）
                 chip = Gtk.Label(label=kind, valign=Gtk.Align.CENTER)
                 chip.add_css_class("caption")
@@ -315,8 +316,8 @@ def run_config(page="shortcuts"):
             box = self.pages["shortcuts"]
             clear(box)
             intro = Gtk.Label(wrap=True, xalign=0, label=(
-                "キーは、ここで一元管理します（GNOME の「カスタムショートカット」と同じ場所に書きます）。"
-                "変更はすぐ保存され、反映まで数秒かかることがあります。"))
+                tr("キーは、ここで一元管理します（GNOME の「カスタムショートカット」と同じ場所に書きます）。"
+                "変更はすぐ保存され、反映まで数秒かかることがあります。")))
             intro.add_css_class("dim-label")
             box.append(intro)
             kbs = {e["slug"]: e for e in kb_list()}
@@ -325,11 +326,11 @@ def run_config(page="shortcuts"):
             for slug, label, args, group in WIN_ACTIONS:
                 e = kbs.get(slug)
                 row = self.shortcut_row(slug, label, f"win {args}", e["binding"] if e else "",
-                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", kind="組み込み")
+                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", kind=tr("組み込み"))
                 (slot_rows if slug.startswith("win-slot-") else rows[group]).append(row)
             if slot_rows:                                     # 1〜9 は 1 行にまとめ、開くと 9 個のキーを付けられる
                 bound = sum(1 for slug, *_ in WIN_ACTIONS if slug.startswith("win-slot-") and kbs.get(slug, {}).get("binding"))
-                exp = Adw.ExpanderRow(title="n 番目のタイルの窓へ（1〜9）", subtitle=f"9 個のうち {bound} 個にキーが付いています")
+                exp = Adw.ExpanderRow(title=tr("n 番目のタイルの窓へ（1〜9）"), subtitle=tr("9 個のうち {0} 個にキーが付いています").format(bound))
                 for r in slot_rows:
                     exp.add_row(r)
                 rows[G_MOVE].append(exp)
@@ -337,20 +338,20 @@ def run_config(page="shortcuts"):
                 slug = command_slug(name)
                 e = kbs.get(slug)
                 rows[G_CMD].append(self.shortcut_row(slug, name, describe_command(c), e["binding"] if e else "",
-                                                     f"win run: {name}", f"{WIN_BIN} run {shlex.quote(name)}", kind="コマンド"))
+                                                     f"win run: {name}", f"{WIN_BIN} run {shlex.quote(name)}", kind=tr("コマンド")))
             for name, c in load_sets().items():
                 slug = set_slug(name)
                 e = kbs.get(slug)
                 rows[G_SET].append(self.shortcut_row(slug, name, set_summary(c), e["binding"] if e else "",
-                                                     f"win set: {name}", f"{WIN_BIN} set {shlex.quote(name)}", kind="セット"))
+                                                     f"win set: {name}", f"{WIN_BIN} set {shlex.quote(name)}", kind=tr("セット")))
             for name, c in EXT.items():                       # 拡張の命令。@command(group=…) で、目的別のグループに入れられる
                 slug = ext_slug(name)
                 e = kbs.get(slug)
                 rows[c.group if c.group in rows else G_OTHER].append(
                     self.shortcut_row(slug, name, c.summary, e["binding"] if e else "",
-                                      f"win: {name}", f"{WIN_BIN} {shlex.quote(name)}", kind="拡張"))
+                                      f"win: {name}", f"{WIN_BIN} {shlex.quote(name)}", kind=tr("拡張")))
             for e in [e for slug, e in kbs.items() if slug.startswith("win-ext-") and slug not in {ext_slug(n) for n in EXT}]:
-                row = self.shortcut_row(e["slug"], e["name"] or e["slug"], "⚠ この命令は拡張に見つかりません（消すか、拡張を直してください）",
+                row = self.shortcut_row(e["slug"], e["name"] or e["slug"], tr("⚠ この命令は拡張に見つかりません（消すか、拡張を直してください）"),
                                         e["binding"], e["name"], e["command"], deletable=True)   # 命令が消えた（名前が変わった）のに、キーだけ残っているもの
                 row.add_css_class("warning")
                 rows[G_OTHER].append(row)
@@ -361,8 +362,8 @@ def run_config(page="shortcuts"):
                         g.add(r)
                     box.append(g)
             own = {s for s, *_ in WIN_ACTIONS}
-            g3 = Adw.PreferencesGroup(title="その他の自作ショートカット", description="win 以外で、自分で登録したものです。")
-            g3.set_header_suffix(self.button("＋ 追加", lambda: self.shortcut_form(None)))
+            g3 = Adw.PreferencesGroup(title=tr("その他の自作ショートカット"), description=tr("win 以外で、自分で登録したものです。"))
+            g3.set_header_suffix(self.button(tr("＋ 追加"), lambda: self.shortcut_form(None)))
             for slug, e in kbs.items():
                 if slug in own or slug.startswith(("win-run-", "win-set-", "win-ext-")):
                     continue
@@ -373,8 +374,8 @@ def run_config(page="shortcuts"):
         def shortcut_form(self, slug):
             """名前とコマンドを入力する（新規なら、続けてキーを押して設定する）。"""
             cur = next((e for e in kb_list() if e["slug"] == slug), None) if slug else None
-            name_row = plain(Adw.EntryRow, title="名前")
-            cmd_row = plain(Adw.EntryRow, title="コマンド（例: /usr/bin/ibus engine mozc-on）")
+            name_row = plain(Adw.EntryRow, title=tr("名前"))
+            cmd_row = plain(Adw.EntryRow, title=tr("コマンド（例: /usr/bin/ibus engine mozc-on）"))
             if cur:
                 name_row.set_text(cur["name"])
                 cmd_row.set_text(cur["command"])
@@ -387,84 +388,83 @@ def run_config(page="shortcuts"):
             def save():
                 n, c = name_row.get_text().strip(), cmd_row.get_text().strip()
                 if not n or not c:
-                    msg.set_label("名前とコマンドの両方を入力してください")
+                    msg.set_label(tr("名前とコマンドの両方を入力してください"))
                     return
                 dlg.close()
                 if cur:
                     kb_set(slug, name=n, command=c)
-                    self.toast("保存しました")
+                    self.toast(tr("保存しました"))
                     self.refresh()
                 else:
                     new = "custom-" + hashlib.sha1(f"{n}{time.time()}".encode()).hexdigest()[:8]
                     self.capture_key(n, "", new, lambda a: (kb_set(new, name=n, command=c, binding=a),
-                                                            self.toast("追加しました"), self.refresh()))
+                                                            self.toast(tr("追加しました")), self.refresh()))
 
             btns = Gtk.Box(spacing=8, halign=Gtk.Align.END)
-            btns.append(self.button("キャンセル", lambda: dlg.close()))
-            btns.append(self.button("保存" if cur else "次へ（キーを設定）", save, "suggested-action"))
+            btns.append(self.button(tr("キャンセル"), lambda: dlg.close()))
+            btns.append(self.button(tr("保存") if cur else tr("次へ（キーを設定）"), save, "suggested-action"))
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=18,
                           margin_start=18, margin_end=18)
             for w in (group, msg, btns):
                 box.append(w)
-            dlg = self.dialog("ショートカットを編集" if cur else "ショートカットを追加", box)
+            dlg = self.dialog(tr("ショートカットを編集") if cur else tr("ショートカットを追加"), box)
 
         # ------------------------------------------------------------ ページ 2: コマンド
         def build_commands(self):
             box = self.pages["commands"]
             clear(box)
             intro = Gtk.Label(wrap=True, xalign=0, label=(
-                "よく使う操作に名前をつけて登録します。`win run 名前` で呼べて、入力欄（win prompt）の補完にも出ます。"
-                "窓の並びは「セット」ページで保存します。キーは「ショートカット」ページで付けます。"))
+                tr("よく使う操作に名前をつけて登録します。`win run 名前` で呼べて、入力欄（win prompt）の補完にも出ます。"
+                "窓の並びは「セット」ページで保存します。キーは「ショートカット」ページで付けます。")))
             intro.add_css_class("dim-label")
             box.append(intro)
             cmds = load_commands()
-            g = Adw.PreferencesGroup(title="登録したコマンド")
-            g.set_header_suffix(self.button("＋ 新しいコマンド", lambda: self.command_form(None), "suggested-action"))
-            kinds = {"win": "win の命令", "shell": "シェルコマンド"}
+            g = Adw.PreferencesGroup(title=tr("登録したコマンド"))
+            g.set_header_suffix(self.button(tr("＋ 新しいコマンド"), lambda: self.command_form(None), "suggested-action"))
+            kinds = {"win": tr("win の命令"), "shell": tr("シェルコマンド")}
             for name, c in cmds.items():
                 row = plain(Adw.ActionRow, title=name, subtitle=f"{kinds.get(c.get('type', 'win'), '?')}　{describe_command(c)}")
                 row.set_subtitle_lines(1)
                 row.add_suffix(self.suffix_box(
-                    self.button("実行", lambda n=name: self.run_command(n), tip="いま実行する"),
-                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n), "編集"),
+                    self.button(tr("実行"), lambda n=name: self.run_command(n), tip=tr("いま実行する")),
+                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n), tr("編集")),
                     self.icon_button("user-trash-symbolic", lambda n=name: self.confirm(
-                        "コマンドを削除しますか？", f"「{n}」と、それに付けたキーを削除します。", "削除",
-                        lambda: self.delete_command(n)), "削除")))
+                        tr("コマンドを削除しますか？"), tr("「{0}」と、それに付けたキーを削除します。").format(n), tr("削除"),
+                        lambda: self.delete_command(n)), tr("削除"))))
                 g.add(row)
             if not cmds:
-                g.add(plain(Adw.ActionRow, title="（まだありません。右上のボタンから作れます）"))
+                g.add(plain(Adw.ActionRow, title=tr("（まだありません。右上のボタンから作れます）")))
             box.append(g)
             ge = Adw.PreferencesGroup(
-                title="拡張（Python）",
-                description=f"{EXT_DIR} に .py を置き、関数に @command を付けると win の命令になります（win 名前 で呼べて、"
-                            "入力欄の補完・登録したコマンド・ショートカットでも使えます）。書き方は同じ場所の winapi.pyi と、win help にあります。")
+                title=tr("拡張（Python）"),
+                description=tr("{0} に .py を置き、関数に @command を付けると win の命令になります（win 名前 で呼べて、入力欄の補完・登録したコマンド・ショートカットでも使えます）。書き方は同じ場所の winapi.pyi と、win help にあります。").format(EXT_DIR))
             ge.set_header_suffix(self.suffix_box(
-                self.button("フォルダを開く", self.open_ext_dir),
-                self.button("再読み込み", lambda: (self.refresh(), self.toast("拡張を読み直しました"))),
-                self.button("＋ 新しい拡張", self.new_ext_form, "suggested-action")))
+                self.button(tr("フォルダを開く"), self.open_ext_dir),
+                self.button(tr("再読み込み"), lambda: (self.refresh(), self.toast(tr("拡張を読み直しました")))),
+                self.button(tr("＋ 新しい拡張"), self.new_ext_form, "suggested-action")))
             for name, c in EXT.items():
                 row = plain(Adw.ActionRow, title=name, subtitle=f"{c.summary}　{c.usage()}")
                 row.set_subtitle_lines(1)
                 row.add_suffix(self.suffix_box(
-                    self.button("実行", lambda n=name: self.run_ext_command(n), tip="引数を省いて、いま実行する"),
+                    self.button(tr("実行"), lambda n=name: self.run_ext_command(n), tip=tr("引数を省いて、いま実行する")),
                     self.icon_button("document-edit-symbolic", lambda c=c: self.open_ext_source(c.file, c.line),
-                                     "定義を開く（端末の nvim）")))
+                                     tr("定義を開く（端末の nvim）"))))
                 ge.add(row)
             for path, msg in EXT_ERRORS:
-                row = plain(Adw.ActionRow, title=f"読み込めませんでした: {os.path.basename(path)}", subtitle=msg)
+                row = plain(Adw.ActionRow, title=tr("読み込めませんでした: {0}").format(os.path.basename(path)), subtitle=msg)
                 row.add_css_class("error")
                 row.add_suffix(self.suffix_box(self.icon_button("document-edit-symbolic",
-                                                                lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), "開く")))
+                                                                lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), tr("開く"))))
                 ge.add(row)
             if not EXT and not EXT_ERRORS:
-                ge.add(plain(Adw.ActionRow, title="（拡張はまだありません）"))
+                ge.add(plain(Adw.ActionRow, title=tr("（拡張はまだありません）")))
             box.append(ge)
 
         def new_ext_form(self):
             """名前を聞いて、ひな形の拡張を作り、端末の nvim で開く。"""
-            name_row = plain(Adw.EntryRow, title="命令の名前（英字・数字・_。例: swap）")
+            name_row = plain(Adw.EntryRow, title=tr("命令の名前（英字・数字・_。例: swap）"))
             group = Adw.PreferencesGroup(
-                description=f"{EXT_DIR}/名前.py を作り、端末の nvim で開きます。保存した後、この画面の「再読み込み」で一覧に出ます。")
+                description=tr("{0}/名前.py を作り、端末の nvim で開きます。保存した後、この画面の「再読み込み」で一覧に出ます。").format(EXT_DIR))
             group.add(name_row)
             msg = Gtk.Label(wrap=True, xalign=0)
             msg.add_css_class("error")
@@ -472,17 +472,17 @@ def run_config(page="shortcuts"):
             def create():
                 n = name_row.get_text().strip()
                 if not n.isidentifier():
-                    msg.set_label("英字・数字・_ で、数字以外から始まる名前にしてください")
+                    msg.set_label(tr("英字・数字・_ で、数字以外から始まる名前にしてください"))
                     return
                 if n in builtin_commands():
-                    msg.set_label(f"「{n}」は win の組み込みの命令と同じ名前です")
+                    msg.set_label(tr("「{0}」は win の組み込みの命令と同じ名前です").format(n))
                     return
                 if n in EXT:
-                    msg.set_label(f"「{n}」はすでにあります（{EXT[n].file}）")
+                    msg.set_label(tr("「{0}」はすでにあります（{1}）").format(n, EXT[n].file))
                     return
                 path = os.path.join(EXT_DIR, f"{n}.py")
                 if os.path.exists(path):
-                    msg.set_label(f"{path} はすでにあります")
+                    msg.set_label(tr("{0} はすでにあります").format(path))
                     return
                 os.makedirs(EXT_DIR, exist_ok=True)
                 write_ext_support()
@@ -490,17 +490,17 @@ def run_config(page="shortcuts"):
                     f.write(EXT_TEMPLATE.format(name=n))
                 dlg.close()
                 self.open_ext_source(path, EXT_TEMPLATE.splitlines().index("@command") + 2)
-                self.toast(f"{path} を作りました。保存したら「再読み込み」を押してください")
+                self.toast(tr("{0} を作りました。保存したら「再読み込み」を押してください").format(path))
 
             name_row.connect("entry-activated", lambda _r: create())
             btns = Gtk.Box(spacing=8, halign=Gtk.Align.END)
-            btns.append(self.button("キャンセル", lambda: dlg.close()))
-            btns.append(self.button("作って開く", create, "suggested-action"))
+            btns.append(self.button(tr("キャンセル"), lambda: dlg.close()))
+            btns.append(self.button(tr("作って開く"), create, "suggested-action"))
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=18,
                           margin_start=18, margin_end=18)
             for w in (group, msg, btns):
                 box.append(w)
-            dlg = self.dialog("新しい拡張", box, 560)
+            dlg = self.dialog(tr("新しい拡張"), box, 560)
 
         def open_ext_dir(self):
             os.makedirs(EXT_DIR, exist_ok=True)
@@ -511,7 +511,7 @@ def run_config(page="shortcuts"):
             if not path:
                 return
             if not (shutil.which("ptyxis") and shutil.which("nvim")):                  # 端末とエディタは、この 2 つだけに対応している
-                self.toast("拡張のソースを開くには、ptyxis と nvim が要ります。ファイルは " + path + " にあります")
+                self.toast(tr("拡張のソースを開くには、ptyxis と nvim が要ります。ファイルは ") + path + tr(" にあります"))
                 return
             subprocess.Popen(["ptyxis", "--new-window", "-d", os.path.dirname(path), "--", "nvim", f"+{line or 1}", path],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -519,60 +519,59 @@ def run_config(page="shortcuts"):
         def run_ext_command(self, name):
             subprocess.Popen([sys.executable, WIN_BIN, name], stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            self.toast(f"「{name}」を実行しました")
+            self.toast(tr("「{0}」を実行しました").format(name))
 
         # ------------------------------------------------------------ ページ 3: セット
         def build_sets(self):
             box = self.pages["sets"]
             clear(box)
             intro = Gtk.Label(wrap=True, xalign=0, label=(
-                "窓の並びに名前をつけて保存したものです。`win set 名前`、または `win set`（絞り込みの小窓）で呼べます。"
-                f"保存先は {SETS} です。キーは「ショートカット」ページで付けます。"))
+                tr("窓の並びに名前をつけて保存したものです。`win set 名前`、または `win set`（絞り込みの小窓）で呼べます。保存先は {0} です。キーは「ショートカット」ページで付けます。").format(SETS)))
             intro.add_css_class("dim-label")
             box.append(intro)
             sets = load_sets()
-            g = Adw.PreferencesGroup(title="保存したセット")
+            g = Adw.PreferencesGroup(title=tr("保存したセット"))
             g.set_header_suffix(self.suffix_box(
-                self.button("＋ 手で書く", lambda: self.command_form(None, is_set=True)),
-                self.button("今の窓の並びを保存…", self.save_arrangement_form, "suggested-action")))
+                self.button(tr("＋ 手で書く"), lambda: self.command_form(None, is_set=True)),
+                self.button(tr("今の窓の並びを保存…"), self.save_arrangement_form, "suggested-action")))
             for name, c in sets.items():
                 row = plain(Adw.ActionRow, title=name, subtitle=set_summary(c))
                 row.set_subtitle_lines(1)
                 row.add_suffix(self.suffix_box(
-                    self.button("適用", lambda n=name: self.run_set(n), tip="いま適用する"),
-                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n, is_set=True), "編集"),
+                    self.button(tr("適用"), lambda n=name: self.run_set(n), tip=tr("いま適用する")),
+                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n, is_set=True), tr("編集")),
                     self.icon_button("user-trash-symbolic", lambda n=name: self.confirm(
-                        "セットを削除しますか？", f"「{n}」と、それに付けたキーを削除します。", "削除",
-                        lambda: self.delete_set(n)), "削除")))
+                        tr("セットを削除しますか？"), tr("「{0}」と、それに付けたキーを削除します。").format(n), tr("削除"),
+                        lambda: self.delete_set(n)), tr("削除"))))
                 g.add(row)
             if not sets:
-                g.add(plain(Adw.ActionRow, title="（まだありません。右上の「今の窓の並びを保存…」から作れます）"))
+                g.add(plain(Adw.ActionRow, title=tr("（まだありません。右上の「今の窓の並びを保存…」から作れます）")))
             box.append(g)
 
         def run_set(self, name):
             subprocess.Popen([sys.executable, WIN_BIN, "set", name], stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            self.toast(f"「{name}」を適用しました")
+            self.toast(tr("「{0}」を適用しました").format(name))
 
         def delete_set(self, name):
             sets = load_sets()
             sets.pop(name, None)
             save_sets(sets)
             kb_remove(set_slug(name))
-            self.toast("削除しました")
+            self.toast(tr("削除しました"))
             self.refresh()
 
         def run_command(self, name):
             subprocess.Popen([sys.executable, WIN_BIN, "run", name], stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            self.toast(f"「{name}」を実行しました")
+            self.toast(tr("「{0}」を実行しました").format(name))
 
         def delete_command(self, name):
             cmds = load_commands()
             cmds.pop(name, None)
             save_commands(cmds)
             kb_remove(command_slug(name))
-            self.toast("削除しました")
+            self.toast(tr("削除しました"))
             self.refresh()
 
         def command_form(self, name, is_set=False):
@@ -580,9 +579,9 @@ def run_config(page="shortcuts"):
             cmds = load_sets() if is_set else load_commands()
             c = cmds.get(name, {"type": "win", "run": ""}) if name else {"type": "win", "run": ""}
             arrange = c.get("type") == "arrange"
-            name_row = plain(Adw.EntryRow, title="名前")
+            name_row = plain(Adw.EntryRow, title=tr("名前"))
             name_row.set_text(name or "")
-            type_row = plain(Adw.ComboRow, title="種類", model=Gtk.StringList.new(["win の命令（複数行可）", "シェルコマンド（複数行可）"]))
+            type_row = plain(Adw.ComboRow, title=tr("種類"), model=Gtk.StringList.new([tr("win の命令（複数行可）"), tr("シェルコマンド（複数行可）")]))
             type_row.set_selected(1 if c.get("type") == "shell" else 0)
             run_buf = Gtk.TextBuffer()
             run_buf.set_text(c.get("run", ""))
@@ -684,7 +683,7 @@ def run_config(page="shortcuts"):
                 markup = signature_markup(text) if text else None
                 if type_row.get_selected() == 1 and text is None:
                     markup = None
-                sig_label.set_markup(markup or "命令を打つと候補が出ます（Tab で確定、↑↓で選択、Esc で閉じる、Ctrl+Space で候補を出す）。")
+                sig_label.set_markup(markup or tr("命令を打つと候補が出ます（Tab で確定、↑↓で選択、Esc で閉じる、Ctrl+Space で候補を出す）。"))
 
             def on_changed(_b):
                 refresh_candidates()
@@ -730,23 +729,23 @@ def run_config(page="shortcuts"):
 
             def update_help(*_):
                 if arrange:
-                    help_l.set_label(f"窓の並び {len(c.get('windows', []))} 枚を保存しています（作り直すには「今の窓の並びを保存」を、同じ名前で）。")
+                    help_l.set_label(tr("窓の並び {0} 枚を保存しています（作り直すには「今の窓の並びを保存」を、同じ名前で）。").format(len(c.get('windows', []))))
                 elif type_row.get_selected() == 0:
-                    help_l.set_label("win の命令を、1 行に 1 つ書きます。上から順に実行し、失敗したらそこで止まります。# で始まる行は無視されます。"
-                                     + ("ふつうは最初の layout 行が並びで、一覧のプレビューにもその行が使われます。" if is_set else ""))
+                    help_l.set_label(tr("win の命令を、1 行に 1 つ書きます。上から順に実行し、失敗したらそこで止まります。# で始まる行は無視されます。")
+                                     + (tr("ふつうは最初の layout 行が並びで、一覧のプレビューにもその行が使われます。") if is_set else ""))
                 else:
-                    help_l.set_label("シェルで実行されます（複数行はそのまま 1 つのスクリプトになります）。win の命令を呼ぶときは頭に win を付けます。")
+                    help_l.set_label(tr("シェルで実行されます（複数行はそのまま 1 つのスクリプトになります）。win の命令を呼ぶときは頭に win を付けます。"))
 
             def validate():
                 n = name_row.get_text().strip()
                 if not n:
-                    return "名前を入力してください"
+                    return tr("名前を入力してください")
                 if n != name and n in cmds:
-                    return f"「{n}」はすでにあります"
+                    return tr("「{0}」はすでにあります").format(n)
                 if not arrange:
                     text = run_text().strip()
                     if not text:
-                        return "内容を入力してください"
+                        return tr("内容を入力してください")
                     if type_row.get_selected() == 0:
                         return check_win_line(text)
                 return None
@@ -772,7 +771,7 @@ def run_config(page="shortcuts"):
                 cmds[n] = new
                 (save_sets if is_set else save_commands)(cmds)
                 dlg.close()
-                self.toast("保存しました")
+                self.toast(tr("保存しました"))
                 self.refresh()
 
             def try_it():
@@ -786,7 +785,7 @@ def run_config(page="shortcuts"):
                     tmp["type"] = "shell" if type_row.get_selected() == 1 else "win"
                     tmp["run"] = run_text().strip()
                 if arrange:
-                    self.toast("保存済みの並びは、保存後に「実行」で試せます")
+                    self.toast(tr("保存済みの並びは、保存後に「実行」で試せます"))
                     return
                 if tmp["type"] == "shell":
                     subprocess.Popen(["sh", "-c", tmp["run"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -801,43 +800,43 @@ def run_config(page="shortcuts"):
                             if r.returncode:
                                 break
                     threading.Thread(target=seq, daemon=True).start()
-                self.toast("実行しました")
+                self.toast(tr("実行しました"))
 
             type_row.connect("notify::selected", update_help)
             update_help()
             btns = Gtk.Box(spacing=8, halign=Gtk.Align.END)
             if not arrange:
-                btns.append(self.button("試す", try_it, tip="保存せずに、いま実行します"))
-            btns.append(self.button("キャンセル", lambda: dlg.close()))
-            btns.append(self.button("保存", save, "suggested-action"))
+                btns.append(self.button(tr("試す"), try_it, tip=tr("保存せずに、いま実行します")))
+            btns.append(self.button(tr("キャンセル"), lambda: dlg.close()))
+            btns.append(self.button(tr("保存"), save, "suggested-action"))
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=18,
                           margin_start=18, margin_end=18)
             if arrange:
                 widgets = (group, help_l, msg, btns)
             else:
-                label = Gtk.Label(label="内容", xalign=0)
+                label = Gtk.Label(label=tr("内容"), xalign=0)
                 label.add_css_class("heading")
                 widgets = (group, label, run_scroll, sig_label, help_l, msg, btns)
             for w in widgets:
                 box.append(w)
-            what = "セット" if is_set else "コマンド"
-            dlg = self.dialog(f"{what}を編集" if name else f"新しい{what}", box, 780, 0 if arrange else 800)
+            what = tr("セット") if is_set else tr("コマンド")
+            dlg = self.dialog(tr("{0}を編集").format(what) if name else tr("新しい{0}").format(what), box, 780, 0 if arrange else 800)
             if not arrange:
                 dlg.connect("closed", lambda _d: popup.unparent())
 
         def save_arrangement_form(self):
-            name_row = plain(Adw.EntryRow, title="名前（例: 作業用）")
+            name_row = plain(Adw.EntryRow, title=tr("名前（例: 作業用）"))
             group = Adw.PreferencesGroup(
-                description="いま表に出ている窓（この画面にあるもの）を、型と窓の列（例: layout v(1,2,1) firefox? ...）として保存します。"
-                            "ピクセルは保存しないので、画面の大きさが変わっても使えます。窓がなければ起動します。`win set 名前` で呼べます。")
+                description=tr("いま表に出ている窓（この画面にあるもの）を、型と窓の列（例: layout v(1,2,1) firefox? ...）として保存します。"
+                            "ピクセルは保存しないので、画面の大きさが変わっても使えます。窓がなければ起動します。`win set 名前` で呼べます。"))
             group.add(name_row)
-            fx_row = plain(Adw.SwitchRow, title="Firefox のタブも保存する",
-                           subtitle="開いているタブの URL を保存し、窓がなければそのタブで開き直します。URL は平文で保存されます")
-            tm_row = plain(Adw.SwitchRow, title="端末の作業ディレクトリも保存する",
-                           subtitle="タブごとの作業ディレクトリを保存し、窓がなければそこで開き直します")
+            fx_row = plain(Adw.SwitchRow, title=tr("Firefox のタブも保存する"),
+                           subtitle=tr("開いているタブの URL を保存し、窓がなければそのタブで開き直します。URL は平文で保存されます"))
+            tm_row = plain(Adw.SwitchRow, title=tr("端末の作業ディレクトリも保存する"),
+                           subtitle=tr("タブごとの作業ディレクトリを保存し、窓がなければそこで開き直します"))
             state_group = Adw.PreferencesGroup(
-                title="状態も保存する（必要なときだけ）",
-                description="特定の作業を繰り返すときのための設定です。汎用の並びでは、オフのままにしてください（開く場所が固定されます）。")
+                title=tr("状態も保存する（必要なときだけ）"),
+                description=tr("特定の作業を繰り返すときのための設定です。汎用の並びでは、オフのままにしてください（開く場所が固定されます）。"))
             state_group.add(fx_row)
             state_group.add(tm_row)
             msg = Gtk.Label(wrap=True, xalign=0)
@@ -849,37 +848,37 @@ def run_config(page="shortcuts"):
             def do_save(overwrite=False):
                 n = name_row.get_text().strip()
                 if not n:
-                    msg.set_label("名前を入力してください")
+                    msg.set_label(tr("名前を入力してください"))
                     return
                 try:
                     count, notes = save_arrangement(WindowCalls(), n, overwrite, state())
+                except NameExistsError:
+                    self.confirm(tr("上書きしますか？"), tr("「{0}」はすでにあります。").format(n), tr("上書き"),
+                                 lambda: (dlg.close(), do_save_force(n)), destructive=False)
+                    return
                 except WinError as e:
-                    if "すでにあります" in str(e):
-                        self.confirm("上書きしますか？", f"「{n}」はすでにあります。", "上書き",
-                                     lambda: (dlg.close(), do_save_force(n)), destructive=False)
-                    else:
-                        msg.set_label(str(e))
+                    msg.set_label(str(e))
                     return
                 dlg.close()
-                self.toast(f"「{n}」を保存しました（窓 {count} 枚）" + ("　注意: " + " ／ ".join(notes) if notes else ""))
+                self.toast(tr("「{0}」を保存しました（窓 {1} 枚）").format(n, count) + (tr("　注意: ") + " ／ ".join(notes) if notes else ""))
                 self.refresh()
 
             def do_save_force(n):
                 try:
                     count, notes = save_arrangement(WindowCalls(), n, True, state())
-                    self.toast(f"「{n}」を上書きしました（窓 {count} 枚）" + ("　注意: " + " ／ ".join(notes) if notes else ""))
+                    self.toast(tr("「{0}」を上書きしました（窓 {1} 枚）").format(n, count) + (tr("　注意: ") + " ／ ".join(notes) if notes else ""))
                 except WinError as e:
                     self.toast(str(e))
                 self.refresh()
 
             btns = Gtk.Box(spacing=8, halign=Gtk.Align.END)
-            btns.append(self.button("キャンセル", lambda: dlg.close()))
-            btns.append(self.button("保存", lambda: do_save(), "suggested-action"))
+            btns.append(self.button(tr("キャンセル"), lambda: dlg.close()))
+            btns.append(self.button(tr("保存"), lambda: do_save(), "suggested-action"))
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=18,
                           margin_start=18, margin_end=18)
             for w in (group, state_group, msg, btns):
                 box.append(w)
-            dlg = self.dialog("今の窓の並びを保存", box, 560)
+            dlg = self.dialog(tr("今の窓の並びを保存"), box, 560)
 
         # ------------------------------------------------------------ ページ 4: 型
         def layout_preview(self, fixed, expr, w=380, h=230):
@@ -902,9 +901,9 @@ def run_config(page="shortcuts"):
             allay = dict(BUILTIN_LAYOUTS)
             allay.update(user)
             intro = Gtk.Label(wrap=True, xalign=0, label=(
-                "窓を並べる「型」です。`v(…)` は左右に、`h(…)` は上下に分けます。数は割合で、`2:v(1,1)` のように、"
+                tr("窓を並べる「型」です。`v(…)` は左右に、`h(…)` は上下に分けます。数は割合で、`2:v(1,1)` のように、"
                 "割合つきで中をさらに分けられます。略記もあり、`,` で左右、`/` で上下、`( )` でまとめ、`2:` で割合です"
-                "（例: `1,2:1/1/1,1` = v(1,2:h(1,1,1),1)。引用符は要りません）。組み込みの型は、複製して編集できます。"))
+                "（例: `1,2:1/1/1,1` = v(1,2:h(1,1,1),1)。引用符は要りません）。組み込みの型は、複製して編集できます。")))
             intro.add_css_class("dim-label")
             box.append(intro)
 
@@ -915,8 +914,8 @@ def run_config(page="shortcuts"):
             for n in names:
                 r = plain(Adw.ActionRow, title=n, subtitle=allay[n])
                 r.set_subtitle_lines(1)
-                tag = "自作" if n in user else "組み込み"
-                badge = Gtk.Label(label=tag + ("（上書き）" if n in user and n in BUILTIN_LAYOUTS else ""), valign=Gtk.Align.CENTER)
+                tag = tr("自作") if n in user else tr("組み込み")
+                badge = Gtk.Label(label=tag + (tr("（上書き）") if n in user and n in BUILTIN_LAYOUTS else ""), valign=Gtk.Align.CENTER)
                 badge.add_css_class("dim-label")
                 r.add_suffix(badge)
                 lst.append(r)
@@ -925,17 +924,17 @@ def run_config(page="shortcuts"):
 
             preview = Gtk.Fixed(halign=Gtk.Align.CENTER, margin_top=6, margin_bottom=6)
             preview.set_size_request(380, 230)
-            name_row = plain(Adw.EntryRow, title="名前")
-            expr_row = plain(Adw.EntryRow, title="式（例: h(1,2:v(1,1),1)　略記: 1,2:1/1/1,1）")
+            name_row = plain(Adw.EntryRow, title=tr("名前"))
+            expr_row = plain(Adw.EntryRow, title=tr("式（例: h(1,2:v(1,1),1)　略記: 1,2:1/1/1,1）"))
             eg = Adw.PreferencesGroup()
             eg.add(name_row)
             eg.add(expr_row)
             status = Gtk.Label(wrap=True, xalign=0)
             ed = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-            save_b = self.button("保存", lambda: save_layout(), "suggested-action")
-            del_b = self.button("削除", lambda: del_layout())
-            dup_b = self.button("複製して編集", lambda: dup_layout())
-            new_b = self.button("＋ 新しい型", lambda: new_layout())
+            save_b = self.button(tr("保存"), lambda: save_layout(), "suggested-action")
+            del_b = self.button(tr("削除"), lambda: del_layout())
+            dup_b = self.button(tr("複製して編集"), lambda: dup_layout())
+            new_b = self.button(tr("＋ 新しい型"), lambda: new_layout())
             row_btns = Gtk.Box(spacing=8, halign=Gtk.Align.END)
             for b in (new_b, dup_b, del_b, save_b):
                 row_btns.append(b)
@@ -945,7 +944,7 @@ def run_config(page="shortcuts"):
             body.append(lst_scroll)
             ed.set_hexpand(True)
             body.append(ed)
-            g = Adw.PreferencesGroup(title="型の一覧と編集")
+            g = Adw.PreferencesGroup(title=tr("型の一覧と編集"))
             g.add(body)
             box.append(g)
 
@@ -965,16 +964,16 @@ def run_config(page="shortcuts"):
                 err = self.layout_preview(preview, expr_row.get_text().strip())
                 nm = name_row.get_text().strip()
                 if not err and not nm:
-                    err = "名前を入力してください"
+                    err = tr("名前を入力してください")
                 if not err and (current["new"] or nm != current["name"]) and nm in allay:
-                    err = f"「{nm}」はすでにあります"
+                    err = tr("「{0}」はすでにあります").format(nm)
                 if err:
                     status.set_label(err)
                     status.remove_css_class("success")
                     status.add_css_class("error")
                 else:
                     n = len(compute_rects(expr_row.get_text().strip(), (0, 0, 1, 1), 0))
-                    status.set_label(f"タイル {n} 枚")
+                    status.set_label(tr("タイル {0} 枚").format(n))
                     status.remove_css_class("error")
                     status.add_css_class("dim-label")
                 editable = name_row.get_editable()
@@ -988,14 +987,14 @@ def run_config(page="shortcuts"):
                 u[nm] = ex
                 write_layout_file(u, insets, gap)
                 self.layout_to_select = nm
-                self.toast(f"型「{nm}」を保存しました")
+                self.toast(tr("型「{0}」を保存しました").format(nm))
                 self.refresh()
 
             def del_layout():
                 u = dict(user)
                 u.pop(current["name"], None)
                 write_layout_file(u, insets, gap)
-                self.toast(f"型「{current['name']}」を削除しました")
+                self.toast(tr("型「{0}」を削除しました").format(current['name']))
                 self.refresh()
 
             def dup_layout():
@@ -1028,12 +1027,12 @@ def run_config(page="shortcuts"):
                 GLib.idle_add(lambda: (lst.get_row_at_index(pos).grab_focus(), False)[1])   # 一覧をそこまでスクロールする
 
             # 配置の設定（隙間・作業領域の余白）
-            g2 = Adw.PreferencesGroup(title="配置の設定",
-                                      description="タイルどうしの隙間と、作業領域の余白（画面の端から窓を置かない幅）。単位は px。")
+            g2 = Adw.PreferencesGroup(title=tr("配置の設定"),
+                                      description=tr("タイルどうしの隙間と、作業領域の余白（画面の端から窓を置かない幅）。単位は px。"))
             spins = {}
-            for key, label, val in (("gap", "タイルどうしの隙間", gap), ("top", "上の余白（上部バーの高さ。主モニタだけに適用）", insets["top"]),
-                                    ("bottom", "下の余白", insets["bottom"]), ("left", "左の余白", insets["left"]),
-                                    ("right", "右の余白", insets["right"])):
+            for key, label, val in (("gap", tr("タイルどうしの隙間"), gap), ("top", tr("上の余白（上部バーの高さ。主モニタだけに適用）"), insets["top"]),
+                                    ("bottom", tr("下の余白"), insets["bottom"]), ("left", tr("左の余白"), insets["left"]),
+                                    ("right", tr("右の余白"), insets["right"])):
                 sp = plain(Adw.SpinRow, title=label, adjustment=Gtk.Adjustment(value=val, lower=0, upper=400, step_increment=1))
                 spins[key] = sp
                 g2.add(sp)
@@ -1041,10 +1040,10 @@ def run_config(page="shortcuts"):
             def save_settings():
                 ins = {k: int(spins[k].get_value()) for k in ("top", "bottom", "left", "right")}
                 write_layout_file(user, ins, int(spins["gap"].get_value()))
-                self.toast("配置の設定を保存しました")
+                self.toast(tr("配置の設定を保存しました"))
                 self.refresh()
 
-            g2.set_header_suffix(self.button("保存", save_settings, "suggested-action"))
+            g2.set_header_suffix(self.button(tr("保存"), save_settings, "suggested-action"))
             box.append(g2)
 
     class ConfigApp(Adw.Application):

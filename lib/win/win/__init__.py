@@ -31,10 +31,10 @@ Window Calls 拡張（window-calls@domandoman.xyz）の D-Bus を呼んで、
 """
 
 # パッケージとしての入口。下のモジュールを、依存の下から順に読み込む。
-from . import common, usage, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, undo, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli
+from . import common, i18n, usage, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, undo, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli
 
 # 互換: win.名前 で、すべてのモジュールの名前を引ける（試験・拡張・古い呼び出し方のため）
-for _m in (common, usage, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, undo, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli):
+for _m in (common, i18n, usage, screen, layouts, shortcuts, dbus, desktop, store, pickwin, placement, undo, simple, textui, nav, sets, prompt, appstate, groups, tilepick, dialog, pickers, layoutflow, ext, lsp, configwin, overlay, cli):
     globals().update({k: v for k, v in vars(_m).items() if not k.startswith('__')})
 
 main = cli.main

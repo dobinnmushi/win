@@ -16,6 +16,7 @@ import types
 import typing
 
 from .common import CONFIG, WinError
+from .i18n import tr
 from .screen import load_config, work_area
 from .layouts import compute_rects, resolve_layout
 from .dbus import AT_SELECTORS, WindowCalls, find_windows, focused, normal_windows, target, usable_windows
@@ -185,7 +186,7 @@ def _run_argv(argv):
     if so:
         print(so, end="")
     if rc:
-        raise WinError(se.strip().removeprefix("win: ") or f"失敗しました: {' '.join(map(str, argv))}")
+        raise WinError(se.strip().removeprefix("win: ") or tr("失敗しました: {0}").format(' '.join(map(str, argv))))
 
 
 def api_run(line):
@@ -208,18 +209,18 @@ def api_apply_set(name):
     """保存したセットを適用する。"""
     sets = load_sets()
     if name not in sets:
-        raise WinError(f"セットが見つかりません: {name}（一覧は win help sets）")
+        raise WinError(tr("セットが見つかりません: {0}（一覧は win help sets）").format(name))
     if run_entry(sets[name]):
-        raise WinError(f"セット「{name}」を適用できませんでした")
+        raise WinError(tr("セット「{0}」を適用できませんでした").format(name))
 
 
 def api_run_command(name):
     """登録したコマンドを実行する。"""
     cmds = load_commands()
     if name not in cmds:
-        raise WinError(f"コマンドが見つかりません: {name}（一覧は win help commands）")
+        raise WinError(tr("コマンドが見つかりません: {0}（一覧は win help commands）").format(name))
     if run_entry(cmds[name]):
-        raise WinError(f"コマンド「{name}」が失敗しました")
+        raise WinError(tr("コマンド「{0}」が失敗しました").format(name))
 
 
 def api_nav(direction):
@@ -291,9 +292,9 @@ def api_resolve(spec):
     if optional:
         cmdline = fallback or launch_for_class(base)
         if not cmdline:
-            raise WinError(f"窓が見つからず、起動コマンドも分かりません: {base}")
+            raise WinError(tr("窓が見つからず、起動コマンドも分かりません: {0}").format(base))
         return Window(launch(wc, cmdline))
-    raise WinError(f"窓が見つかりません: {spec}")
+    raise WinError(tr("窓が見つかりません: {0}").format(spec))
 
 
 class ApiDialog(Dialog):
@@ -399,12 +400,12 @@ def api_window_items(exclude=()):
     return window_items(_wc(), exclude, wrap=Window)
 
 
-def api_pick_window(title="窓を選ぶ", *, launch=True, exclude=(), map=None):
+def api_pick_window(title=tr("窓を選ぶ"), *, launch=True, exclude=(), map=None):
     """窓を 1 枚選ぶ。選んだ窓、Esc なら None。"""
     return pick_window_dialog(title, launch=launch, exclude=exclude, map=map, wrap=Window)
 
 
-def api_pick(title="窓を選ぶ", slot=None, launch=True, exclude=(), rect=None):
+def api_pick(title=tr("窓を選ぶ"), slot=None, launch=True, exclude=(), rect=None):
     """layout -i と同じ小窓で、窓を 1 枚その場で選ぶ（先頭 ! でアプリを起動して、その窓）。取り消したら WinError。"""
     wc, rects, labels, index = _wc(), None, None, 0
     if rect is not None:                                  # まだ窓のない場所: いまの並びの地図に、その場所を足して強調する
@@ -413,18 +414,18 @@ def api_pick(title="窓を選ぶ", slot=None, launch=True, exclude=(), rect=None
         ax, ay, aw, ah = work_area(load_config())
         x, y, w_, h_ = rect
         rects.append(((x - ax) / aw, (y - ay) / ah, w_ / aw, h_ / ah))
-        labels.append("ここ")
+        labels.append(tr("ここ"))
         index = len(rects) - 1
     if slot == 0:                                         # 0 は前面の窓: そのタイルを強調する（並びの外なら強調なし）
         slot = api_slot_of(api_focused())
     if slot is not None and rect is None:
         rects, labels = slot_map(wc)
         if rects is None or not 1 <= slot <= len(rects):
-            raise WinError(f"タイル {slot} がありません（いまの並びのタイルは {len(rects or [])} 枚）")
+            raise WinError(tr("タイル {0} がありません（いまの並びのタイルは {1} 枚）").format(slot, len(rects or [])))
         index = slot - 1
     w = pick_window_map(wc, title, rects, index, labels, allow_launch=launch, exclude={x.id for x in exclude})
     if w is None:
-        raise WinError("選ぶのを取り消しました")
+        raise WinError(tr("選ぶのを取り消しました"))
     return Window(w)
 
 
@@ -522,13 +523,13 @@ class ExtCommand:
                 pname = t[2:].replace("-", "_")
                 p = params.get(pname)
                 if p is None or p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
-                    raise WinError(f"{self.name}: 知らないオプションです: {t}（書式: {self.usage()}）")
+                    raise WinError(tr("{0}: 知らないオプションです: {1}（書式: {2}）").format(self.name, t, self.usage()))
                 if p.annotation is bool:
                     named[pname] = True
                 else:
                     i += 1
                     if i >= len(tokens):
-                        raise WinError(f"{self.name}: {t} の値がありません")
+                        raise WinError(tr("{0}: {1} の値がありません").format(self.name, t))
                     named[pname] = _convert(p, tokens[i], self.name)
             else:
                 positional.append(t)
@@ -541,7 +542,7 @@ class ExtCommand:
                 elif p.default is not p.empty:
                     args.append(_default(p, self.name))
                 else:
-                    raise WinError(f"{self.name}: {p.name} がありません（書式: {self.usage()}）")
+                    raise WinError(tr("{0}: {1} がありません（書式: {2}）").format(self.name, p.name, self.usage()))
             elif p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD):
                 args.append(named.pop(p.name))
             elif p.kind == p.VAR_POSITIONAL:
@@ -549,14 +550,14 @@ class ExtCommand:
                 positional = []
             elif p.kind == p.KEYWORD_ONLY and p.name not in named:
                 if p.default is p.empty:
-                    raise WinError(f"{self.name}: --{p.name} がありません（書式: {self.usage()}）")
+                    raise WinError(tr("{0}: --{1} がありません（書式: {2}）").format(self.name, p.name, self.usage()))
                 named[p.name] = _default(p, self.name)
         if positional:
-            raise WinError(f"{self.name}: 引数が多すぎます: {' '.join(positional)}（書式: {self.usage()}）")
+            raise WinError(tr("{0}: 引数が多すぎます: {1}（書式: {2}）").format(self.name, ' '.join(positional), self.usage()))
         return args, named
 
 
-_TYPE_LABELS = {Window: "窓", int: "整数", float: "数", str: "文字列", bool: "オン/オフ"}
+_TYPE_LABELS = {Window: tr("窓"), int: tr("整数"), float: tr("数"), str: tr("文字列"), bool: tr("オン/オフ")}
 
 
 def is_window_ann(ann):
@@ -599,7 +600,7 @@ def _convert(p, text, cmd):
         if ann is bool:
             return text.lower() in ("1", "true", "yes", "on")
     except ValueError:
-        raise WinError(f"{cmd}: {p.name} は{_TYPE_LABELS.get(ann, '値')}で書いてください: {text}")
+        raise WinError(tr("{0}: {1} は{2}で書いてください: {3}").format(cmd, p.name, _TYPE_LABELS.get(ann, '値'), text))
     return text
 
 
@@ -614,7 +615,7 @@ def api_command(fn=None, *, name=None, group=None):
     def register(f):
         n = name or f.__name__
         if n in builtin_commands():
-            EXT_ERRORS.append((inspect.getsourcefile(f) or "?", f"「{n}」は win の組み込みの命令と同じ名前なので、使えません"))
+            EXT_ERRORS.append((inspect.getsourcefile(f) or "?", tr("「{0}」は win の組み込みの命令と同じ名前なので、使えません").format(n)))
         else:
             EXT[n] = ExtCommand(f, n)
             EXT[n].group = group
@@ -623,7 +624,7 @@ def api_command(fn=None, *, name=None, group=None):
 
 
 def make_winapi():
-    m = types.ModuleType("winapi", "win の拡張用の関数群。")
+    m = types.ModuleType("winapi", tr("win の拡張用の関数群。"))
     for k, v in {"command": api_command, "at": api_at, "find": api_find, "windows": api_windows, "focused": api_focused,
                  "area": api_area, "run": api_run, "notify": api_notify, "sel": api_sel,
                  "layout": api_layout, "apply_set": api_apply_set, "run_command": api_run_command, "nav": api_nav,
@@ -636,7 +637,7 @@ def make_winapi():
     return m
 
 
-WINAPI_STUB = '''\"\"\"win の拡張用の関数群（型の定義）。win が書き出すファイルなので、編集しても上書きされます。
+WINAPI_STUB = tr('''\"\"\"win の拡張用の関数群（型の定義）。win が書き出すファイルなので、編集しても上書きされます。
 
 拡張は、このディレクトリに .py を置いて書きます。@command を付けた関数が win の命令になり、
 win prompt・`win 名前`・ショートカット・登録したコマンドから呼べます。
@@ -901,10 +902,10 @@ def term(*dirs: str) -> None:
     \"\"\"端末（Ptyxis）を、作業ディレクトリごとのタブつきで新しく開く。\"\"\"
 def notify(text: str, title: str = "win") -> None:
     \"\"\"デスクトップの通知を出す。\"\"\"
-'''
+''')
 
 
-EXT_TEMPLATE = '''# win の拡張。@command を付けた関数が win の命令になる（win 名前・入力欄の補完・ショートカットで呼べる）。
+EXT_TEMPLATE = tr('''# win の拡張。@command を付けた関数が win の命令になる（win 名前・入力欄の補完・ショートカットで呼べる）。
 #   使える関数の一覧:   win help api   （宣言と説明の全文は同じフォルダの winapi.pyi）
 #   引数の型:           Window・int・float・str・bool（打った語をこの型に変換する。bool は --名前 で True）
 #   窓の引数の既定値:   sel("@focused")・sel("@left")・sel("@prev") など
@@ -920,7 +921,7 @@ def {name}(w: Window = sel("@focused")):
     w: 対象の窓（省くと前面の窓）
     """
     ...
-'''
+''')
 
 
 PYRIGHT_CONFIG = '{\n  "reportMissingModuleSource": false,\n  "reportCallInDefaultInitializer": false\n}\n'
@@ -963,7 +964,7 @@ def load_extensions():
             mod = importlib.import_module(stem)
             _EXT_STATE["mods"].append(stem)
             if os.path.abspath(getattr(mod, "__file__", "") or "") != os.path.abspath(path):
-                EXT_ERRORS.append((path, f"「{stem}」は Python の標準などの部品と同じ名前なので、読み込めません（名前を変えてください）"))
+                EXT_ERRORS.append((path, tr("「{0}」は Python の標準などの部品と同じ名前なので、読み込めません（名前を変えてください）").format(stem)))
         except Exception as e:
             EXT_ERRORS.append((path, ext_error_text(e)))
 
@@ -984,7 +985,7 @@ def reload_extensions():
 def ext_error_text(e):
     """例外を、拡張のどの行で起きたかが分かる短い説明にする。"""
     if isinstance(e, SyntaxError):
-        return f"{os.path.basename(e.filename or '')}:{e.lineno}: 文法エラー: {e.msg}"
+        return tr("{0}:{1}: 文法エラー: {2}").format(os.path.basename(e.filename or ''), e.lineno, e.msg)
     frames = [f for f in traceback.extract_tb(e.__traceback__) if f.filename.startswith(EXT_DIR)]
     where = f"{os.path.basename(frames[-1].filename)}:{frames[-1].lineno}: " if frames else ""
     return f"{where}{type(e).__name__}: {e}"
@@ -1054,7 +1055,7 @@ def api_entries():
                     entry = (head, ast.get_docstring(m) or "")
                     out[f"{node.name}.{m.name}"] = entry
                     out.setdefault(m.name, entry)
-    out["command"] = ('@command　または　@command(name="別名")', out.get("command", ("", ""))[1])
+    out["command"] = (tr('@command　または　@command(name="別名")'), out.get("command", ("", ""))[1])
     return out
 
 
@@ -1069,22 +1070,22 @@ def help_names(py=False):
 
 
 API_SECTIONS = [
-    ("命令を作る", ["command", "sel", "WinError"]),
-    ("窓を探す・選ぶ（Window を返す）", ["at", "find", "focused", "windows", "slots", "slot_of", "resolve", "pick"]),
-    ("窓 1 枚の情報と操作（w は at() などで得た Window）", ["Window.*"]),
-    ("並べる・フォーカスを移す", ["layout", "layouts", "tiles", "area", "nav"]),
-    ("登録したもの・win の命令を呼ぶ", ["apply_set", "run_command", "run"]),
-    ("起動・通知", ["launch", "browse", "term", "notify"]),
-    ("重なった窓（層）", ["stack", "cycle"]),
-    ("デスクトップ（ワークスペース）", ["desktops", "switch_desktop", "Window.desktop"]),
-    ("窓のグループ（名前つき・保存つき）", ["groups", "group", "group_of", "Group", "Group.members", "Group.active", "Group.rect", "Group.add",
+    (tr("命令を作る"), ["command", "sel", "WinError"]),
+    (tr("窓を探す・選ぶ（Window を返す）"), ["at", "find", "focused", "windows", "slots", "slot_of", "resolve", "pick"]),
+    (tr("窓 1 枚の情報と操作（w は at() などで得た Window）"), ["Window.*"]),
+    (tr("並べる・フォーカスを移す"), ["layout", "layouts", "tiles", "area", "nav"]),
+    (tr("登録したもの・win の命令を呼ぶ"), ["apply_set", "run_command", "run"]),
+    (tr("起動・通知"), ["launch", "browse", "term", "notify"]),
+    (tr("重なった窓（層）"), ["stack", "cycle"]),
+    (tr("デスクトップ（ワークスペース）"), ["desktops", "switch_desktop", "Window.desktop"]),
+    (tr("窓のグループ（名前つき・保存つき）"), ["groups", "group", "group_of", "Group", "Group.members", "Group.active", "Group.rect", "Group.add",
                               "Group.remove", "Group.delete", "Group.next", "Group.show", "Group.place"]),
-    ("対話型の小窓（1 回で選ぶ）", ["choose", "confirm", "ask", "pick_tile", "pick_window", "window_items", "Item", "Map"]),
-    ("対話型の小窓（やり取りを回す）", ["Dialog", "Dialog.rows", "Dialog.map", "Dialog.notice", "Dialog.keys", "Dialog.text", "Dialog.events", "Event"]),
+    (tr("対話型の小窓（1 回で選ぶ）"), ["choose", "confirm", "ask", "pick_tile", "pick_window", "window_items", "Item", "Map"]),
+    (tr("対話型の小窓（やり取りを回す）"), ["Dialog", "Dialog.rows", "Dialog.map", "Dialog.notice", "Dialog.keys", "Dialog.text", "Dialog.events", "Event"]),
 ]
 
 
-API_EXAMPLE = '''from winapi import Window, command, sel, layout, focused, find
+API_EXAMPLE = tr('''from winapi import Window, command, sel, layout, focused, find
 
 
 @command
@@ -1099,19 +1100,19 @@ def pair(other: Window = sel("@prev")):
 def minall():
     """前面以外の窓をすべて最小化する"""
     for w in find("@others"):
-        w.min()'''
+        w.min()''')
 
 
 def print_api():
     """拡張を書くための一覧（winapi.pyi の宣言と説明文から作る）。"""
     api = api_entries()
-    print(f"win の拡張（Python）で使えるもの。from winapi import 名前 で使う。定義の全文: {os.path.join(EXT_DIR, 'winapi.pyi')}")
-    print("  ・@command を付けた関数が win の命令になる（win 名前・入力欄・ショートカット・登録したコマンドで呼べる）")
-    print("  ・引数の型の注釈（Window・int・float・str・bool）で、打った語を変換する。窓の既定値は sel(\"@left\") のように書く")
-    print("  ・int | Window にすると、数字は整数（タイルの番号など）、ほかは窓として受け取る")
-    print("  ・省いたらその場で選ばせるには、既定値を sel(\"@pick\") にするか、Window | None にして pick() を呼ぶ")
-    print("  ・説明文の 1 行目が一覧に出る説明。「引数名: 説明」の行が引数の説明")
-    print("  ・ほかの拡張の関数は、ふつうに import して呼べる（例 from swap import exchange）")
+    print(tr("win の拡張（Python）で使えるもの。from winapi import 名前 で使う。定義の全文: {0}").format(os.path.join(EXT_DIR, 'winapi.pyi')))
+    print(tr("  ・@command を付けた関数が win の命令になる（win 名前・入力欄・ショートカット・登録したコマンドで呼べる）"))
+    print(tr("  ・引数の型の注釈（Window・int・float・str・bool）で、打った語を変換する。窓の既定値は sel(\"@left\") のように書く"))
+    print(tr("  ・int | Window にすると、数字は整数（タイルの番号など）、ほかは窓として受け取る"))
+    print(tr("  ・省いたらその場で選ばせるには、既定値を sel(\"@pick\") にするか、Window | None にして pick() を呼ぶ"))
+    print(tr("  ・説明文の 1 行目が一覧に出る説明。「引数名: 説明」の行が引数の説明"))
+    print(tr("  ・ほかの拡張の関数は、ふつうに import して呼べる（例 from swap import exchange）"))
     for title, names in API_SECTIONS:
         print(f"\n■ {title}")
         if names == ["Window.*"]:
@@ -1122,11 +1123,11 @@ def print_api():
             for l in doc.splitlines()[:2]:
                 if l.strip():
                     print(f"      {l.strip()}")
-    print("\n■ 窓の指定（at・find・sel・layout に書く文字列）")
-    print("  クラス・題名の一部（例 \"firefox\"）、ID、または:")
+    print(tr("\n■ 窓の指定（at・find・sel・layout に書く文字列）"))
+    print(tr("  クラス・題名の一部（例 \"firefox\"）、ID、または:"))
     for sname, d in AT_SELECTORS:
         print(f"  {sname:<10} {d}")
-    print("\n■ 例")
+    print(tr("\n■ 例"))
     print("\n".join("  " + l for l in API_EXAMPLE.splitlines()))
     return 0
 
@@ -1141,13 +1142,13 @@ def cmd_help(args):
         if args.name in api:
             head, doc = api[args.name]
             print(head)
-            print("\n".join("  " + l for l in doc.splitlines()) or "  （説明なし）")
+            print("\n".join("  " + l for l in doc.splitlines()) or tr("  （説明なし）"))
             return 0
         if args.name in EXT:
             c = EXT[args.name]
-            print(f"def {c.py_signature(code=True)}　（拡張の命令。{c.file}:{c.line}）")
-            print("\n".join("  " + l for l in (c.doc or "（説明なし）").splitlines()))
-            print(f"  ほかの拡張からは from {os.path.splitext(os.path.basename(c.file or 'x'))[0]} import {c.fn.__name__} で呼べる")
+            print(tr("def {0}　（拡張の命令。{1}:{2}）").format(c.py_signature(code=True), c.file, c.line))
+            print("\n".join("  " + l for l in (c.doc or tr("（説明なし）")).splitlines()))
+            print(tr("  ほかの拡張からは from {0} import {1} で呼べる").format(os.path.splitext(os.path.basename(c.file or 'x'))[0], c.fn.__name__))
             return 0
     if args.py and not args.name:
         return print_api()
@@ -1159,31 +1160,31 @@ def cmd_help(args):
         if n in api and n not in EXT and n not in SIGNATURES:
             head, doc = api[n]
             print(f"winapi: {head}")
-            print("\n".join("  " + l for l in doc.splitlines()) or "  （説明なし）")
-            print(f"（一覧は win help api、定義は {os.path.join(EXT_DIR, 'winapi.pyi')}）")
+            print("\n".join("  " + l for l in doc.splitlines()) or tr("  （説明なし）"))
+            print(tr("（一覧は win help api、定義は {0}）").format(os.path.join(EXT_DIR, 'winapi.pyi')))
             return 0
         cmds, sets, layouts = load_commands(), load_sets(), load_config()["layouts"]
         if n == "commands":
-            print(f"登録したコマンド（{COMMANDS}。win run 名前 で実行、中身は win help 名前）")
+            print(tr("登録したコマンド（{0}。win run 名前 で実行、中身は win help 名前）").format(COMMANDS))
             for k, c in cmds.items():
                 print(f"  {k:<14} {c.get('type', 'win'):<6} {describe_command(c)}")
             if not cmds:
-                print("  （まだありません）")
+                print(tr("  （まだありません）"))
             return 0
         if n == "sets":
-            print(f"セット（{SETS}。win set 名前 で適用、中身は win help 名前）")
+            print(tr("セット（{0}。win set 名前 で適用、中身は win help 名前）").format(SETS))
             for k, c in sets.items():
                 print(f"  {k:<14} {set_summary(c)}")
             if not sets:
-                print("  （まだありません）")
+                print(tr("  （まだありません）"))
             return 0
         if n == "layouts":
-            print(f"型（{CONFIG} と組み込み。layout 名前 で使う。式を直接書いてもよい）")
+            print(tr("型（{0} と組み込み。layout 名前 で使う。式を直接書いてもよい）").format(CONFIG))
             for k, e in layouts.items():
                 print(f"  {k:<10} {e}")
             return 0
         if n in cmds or n in sets:
-            for kind, pool, how in (("コマンド", cmds, "win run"), ("セット", sets, "win set")):
+            for kind, pool, how in ((tr("コマンド"), cmds, "win run"), (tr("セット"), sets, "win set")):
                 if n in pool:
                     c = pool[n]
                     print(f"{kind}「{n}」（{how} {shlex.quote(n)}）")
@@ -1194,11 +1195,11 @@ def cmd_help(args):
             c = EXT[n]
             print(c.usage())
             print(f"def {c.py_signature()}")
-            print(c.doc or "（説明なし）")
+            print(c.doc or tr("（説明なし）"))
             for part in c.parts():
                 print(f"  {part[-1] if part[0] != 'pos' else part[2]}")
             if c.file:
-                print(f"定義: {c.file}:{c.line}")
+                print(tr("定義: {0}:{1}").format(c.file, c.line))
             return 0
         if n in SIGNATURES:
             parts, summary = SIGNATURES[n]
@@ -1211,18 +1212,18 @@ def cmd_help(args):
                 if n.startswith(s.rstrip(":")):
                     print(f"{s}　{d}")
             return 0
-        raise WinError(f"知らない命令・名前です: {n}（一覧は win help）")
-    print("組み込みの命令（詳しくは win help 名前）")
+        raise WinError(tr("知らない命令・名前です: {0}（一覧は win help）").format(n))
+    print(tr("組み込みの命令（詳しくは win help 名前）"))
     for n, (_p, summary) in SIGNATURES.items():
         print(f"  {n:<10} {summary}")
     if EXT:
-        print(f"\n拡張の命令（{EXT_DIR}。詳しくは win help 名前、拡張で使える関数は win help api）")
+        print(tr("\n拡張の命令（{0}。詳しくは win help 名前、拡張で使える関数は win help api）").format(EXT_DIR))
         for n, c in EXT.items():
             print(f"  {c.py_signature()}　{c.summary}")
-    print("\nほかの一覧: win help api（拡張で使える関数）・commands（登録したコマンド）・sets（セット）・layouts（型）")
-    print("\n位置・状態での窓の指定（窓を書ける所ならどこでも。【複数】は当たる窓すべてにかかる）")
+    print(tr("\nほかの一覧: win help api（拡張で使える関数）・commands（登録したコマンド）・sets（セット）・layouts（型）"))
+    print(tr("\n位置・状態での窓の指定（窓を書ける所ならどこでも。【複数】は当たる窓すべてにかかる）"))
     for s, d in AT_SELECTORS:
         print(f"  {s:<10} {d}")
     for path, msg in EXT_ERRORS:
-        print(f"\n読み込めなかった拡張: {path}\n  {msg}", file=sys.stderr)
+        print(tr("\n読み込めなかった拡張: {0}\n  {1}").format(path, msg), file=sys.stderr)
     return 0

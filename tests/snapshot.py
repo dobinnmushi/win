@@ -23,6 +23,7 @@ for f in ("commands.toml", "sets.toml"):
 ENV = dict(os.environ, WIN_COMMANDS=os.path.join(TMP, "commands.toml"), WIN_SETS=os.path.join(TMP, "sets.toml"),
            WIN_EXT=os.path.join(TMP, "ext"), XDG_STATE_HOME=os.path.join(TMP, "state"))
 ENV["PYTHONPATH"] = ""
+ENV.setdefault("WIN_LANG", "ja")        # 出力の言語。環境に左右されないよう日本語に固定（英語の出力を見るなら WIN_LANG=en で呼ぶ）
 
 
 def section(title):

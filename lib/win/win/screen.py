@@ -6,6 +6,7 @@ from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import BUILTIN_LAYOUTS, CONFIG, DEFAULT_INSETS, WinError
+from .i18n import tr
 
 
 def display_state():
@@ -18,7 +19,7 @@ def display_state():
         _serial, monitors, logical, _props = p.call_sync(
             "GetCurrentState", None, Gio.DBusCallFlags.NONE, 5000, None).unpack()
     except GLib.Error as e:
-        raise WinError(f"画面の情報を取れません: {e.message}")
+        raise WinError(tr("画面の情報を取れません: {0}").format(e.message))
     return monitors, logical
 
 
@@ -80,7 +81,7 @@ def find_screen(choice=None):
         names = [c[0] for lm, _ in rects for c in lm[5]]
         chosen = next(((lm, r) for lm, r in rects if choice in [c[0] for c in lm[5]]), None)
         if chosen is None:
-            raise WinError(f"モニタが見つかりません: {choice}（使えるのは primary, current, {', '.join(names)}）")
+            raise WinError(tr("モニタが見つかりません: {0}（使えるのは primary, current, {1}）").format(choice, ', '.join(names)))
     return Screen(chosen[1], chosen[0][4], chosen[0][5][0][0])
 
 

@@ -3,6 +3,7 @@
 import re
 
 from .common import WinError
+from .i18n import tr
 
 
 SHORT_LAYOUT_RE = re.compile(r"[\d\s:/(),.]+")
@@ -19,12 +20,12 @@ def shorthand_to_long(text):
     例: `1,2,1` = v(1,2,1)、`1,2:1/1/1,1` = v(1,2:h(1,1,1),1)、`(1,1/1)/1/(1,1)` = h(v(1,h(1,1)),1,v(1,1))。
     `数:` の後が数の並び（a/b/c）なら、並び全体への重み。かっこの式への重みは `数:(…)`。"""
     def err(msg):
-        raise WinError(f"型の式（略記）が読めません（{msg}）: {text!r}")
+        raise WinError(tr("型の式（略記）が読めません（{0}）: {1!r}").format(msg, text))
 
     toks = re.findall(r"\d+(?:\.\d+)?|[:/(),]|\s+|.", text)
     toks = ["SP" if t.isspace() else t for t in toks]
     if any(len(t) == 1 and not (t.isdigit() or t in ":/(),") for t in toks if t != "SP"):
-        err("使えない文字があります")
+        err(tr("使えない文字があります"))
     st = {"i": 0}
 
     def tok(k=0):
@@ -46,7 +47,7 @@ def shorthand_to_long(text):
                 st["i"] += 1
             if tok() == ",":
                 if not items or comma:
-                    err("「,」の前に要素がありません")
+                    err(tr("「,」の前に要素がありません"))
                 comma = True
                 st["i"] += 1
                 continue
@@ -55,9 +56,9 @@ def shorthand_to_long(text):
             items.append(parse_item())
             comma = False
         if comma:
-            err("末尾の「,」の後に要素が必要です")
+            err(tr("末尾の「,」の後に要素が必要です"))
         if not items:
-            err("空です")
+            err(tr("空です"))
         return items
 
     def parse_item():
@@ -71,7 +72,7 @@ def shorthand_to_long(text):
             chain.append(parse_elem())
         if len(chain) == 1:
             if pre is not None:
-                err("「重み:数」は使えません。重みは「重み:式」の形です")
+                err(tr("「重み:数」は使えません。重みは「重み:式」の形です"))
             return chain[0]
         return (1.0 if pre is None else pre, ("split", "h", chain))
 
@@ -80,20 +81,20 @@ def shorthand_to_long(text):
         if isnum(t):
             if tok(1) == ":":
                 if tok(2) != "(":
-                    err("「数:」の後には ( か数の並びが必要です")
+                    err(tr("「数:」の後には ( か数の並びが必要です"))
                 st["i"] += 2
                 return (float(t), parse_group())
             st["i"] += 1
             return (float(t), None)
         if t == "(":
             return (1.0, parse_group())
-        err("数か ( が必要です")
+        err(tr("数か ( が必要です"))
 
     def parse_group():
         st["i"] += 1                                                  # (
         node = build(parse_cols())
         if tok() != ")":
-            err(") が必要です")
+            err(tr(") が必要です"))
         st["i"] += 1
         return node
 
@@ -108,7 +109,7 @@ def shorthand_to_long(text):
 
     node = build(parse_cols())
     if st["i"] < len(toks):
-        err("対応しない ) があります")
+        err(tr("対応しない ) があります"))
     return emit(node)
 
 
@@ -120,7 +121,7 @@ class LayoutParser:
         self.i = 0
 
     def err(self, msg):
-        raise WinError(f"型の式が読めません（{msg}）: {self.s!r} の {self.i} 文字目")
+        raise WinError(tr("型の式が読めません（{0}）: {1!r} の {2} 文字目").format(msg, self.s, self.i))
 
     def ws(self):
         while self.i < len(self.s) and self.s[self.i].isspace():
@@ -130,7 +131,7 @@ class LayoutParser:
         node = self.expr()
         self.ws()
         if self.i != len(self.s):
-            self.err("余分な文字")
+            self.err(tr("余分な文字"))
         return node
 
     def expr(self):
@@ -140,7 +141,7 @@ class LayoutParser:
             return ("leaf",)
         m = re.compile(r"([vh])\s*\(").match(self.s, self.i)
         if not m:
-            self.err("full か v( h( が必要")
+            self.err(tr("full か v( h( が必要"))
         self.i = m.end()
         args = [self.arg()]
         while True:
@@ -151,7 +152,7 @@ class LayoutParser:
             else:
                 break
         if self.i >= len(self.s) or self.s[self.i] != ")":
-            self.err(") が必要")
+            self.err(tr(") が必要"))
         self.i += 1
         return ("split", m.group(1), args)
 

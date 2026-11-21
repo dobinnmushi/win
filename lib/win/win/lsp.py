@@ -5,6 +5,7 @@ import shlex
 import sys
 
 from .common import WinError
+from .i18n import tr
 from .screen import load_config
 from .dbus import AT_SELECTORS, WindowCalls, normal_windows, selector_for
 from .store import SIGNATURES, load_commands, load_sets, signature_parts
@@ -173,9 +174,9 @@ class WinLsp:
         text = None
         if word == tokens[0] and word in EXT:
             c = EXT[word]
-            text = f"```\n{c.usage()}\n```\n{c.doc or '（説明なし）'}\n\n" + "\n".join(
+            text = f"```\n{c.usage()}\n```\n{c.doc or tr('（説明なし）')}\n\n" + "\n".join(
                 f"- `{part[1]}` {part[-1] if part[0] != 'pos' else part[2]}" for part in c.parts()) + \
-                (f"\n\n定義: `{c.file}:{c.line}`" if c.file else "")
+                (tr("\n\n定義: `{0}:{1}`").format(c.file, c.line) if c.file else "")
         elif word == tokens[0] and word in SIGNATURES:
             parts, summary = SIGNATURES[word]
             sp = signature_parts(f"{word} ") or {"items": []}
@@ -184,12 +185,12 @@ class WinLsp:
         elif word.startswith("@"):
             text = "\n".join(f"`{s}` {d}" for s, d in AT_SELECTORS if word.lower().startswith(s.rstrip(":")) or s.startswith(word.lower()))
         elif word in self.spec["layouts"]:
-            text = f"型 `{word}` = `{self.spec['layouts'][word]}`"
+            text = tr("型 `{0}` = `{1}`").format(word, self.spec['layouts'][word])
         else:
             self.refresh_windows()
             hits = [w for w in self.spec["windows"] if word.lower() in (w["cls"] + " " + w["title"]).lower()]
             if hits:
-                text = "当たる窓:\n" + "\n".join(f"- `{w['cls']}` {w['title']}" for w in hits[:8])
+                text = tr("当たる窓:\n") + "\n".join(f"- `{w['cls']}` {w['title']}" for w in hits[:8])
         return {"contents": {"kind": "markdown", "value": text}} if text else None
 
     def publish(self, uri):
@@ -202,10 +203,10 @@ class WinLsp:
             try:
                 argv = shlex.split(s)
             except ValueError as e:
-                msg = f"引用符が閉じていません: {e}"
+                msg = tr("引用符が閉じていません: {0}").format(e)
             else:
                 argv = argv[1:] if argv and argv[0] == "win" else argv
-                msg = f"知らない命令です: {argv[0]}（一覧は win help）" if argv and argv[0] not in known else None
+                msg = tr("知らない命令です: {0}（一覧は win help）").format(argv[0]) if argv and argv[0] not in known else None
             if msg:
                 diags.append({"range": {"start": {"line": ln, "character": 0},
                                         "end": {"line": ln, "character": self.to_lsp(line, len(line))}},

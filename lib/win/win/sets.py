@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from .common import WinError
+from .i18n import tr
 from .screen import Screen, default_screen, display_state, find_screen, load_config, logical_rect, use_screen
 from .layouts import compute_rects, resolve_layout
 from .dbus import WindowCalls
@@ -51,13 +52,13 @@ def _spec_label(sel):
 def set_summary(c):
     """一覧に出す 1 行の説明（起動コマンドに含まれる URL などは出さない）。"""
     if c.get("type") == "arrange":
-        return f"窓 {len(c.get('windows', []))} 枚（旧形式）"
+        return tr("窓 {0} 枚（旧形式）").format(len(c.get('windows', [])))
     parsed = _layout_line(c)
     if not parsed:
         return describe_command(c)
     expr, sels = parsed
     with_state = any(parse_window_spec(x)[2] for x in sels if not x.startswith("!"))
-    return f"{expr}{'  ＋状態' if with_state else ''}  " + " ・ ".join(_spec_label(x) or "（空）" for x in sels)      # 印は、長い行で省略されない先頭側に置く
+    return f"{expr}{tr('  ＋状態') if with_state else ''}  " + tr(" ・ ").join(_spec_label(x) or tr("（空）") for x in sels)      # 印は、長い行で省略されない先頭側に置く
 
 
 def _short_cls(s):
@@ -117,7 +118,7 @@ def cmd_set(args):
     name = args.name
     if name is None:
         if not sets:
-            raise WinError("セットがありません（win save 名前 で、いまの窓の並びを保存できます）")
+            raise WinError(tr("セットがありません（win save 名前 で、いまの窓の並びを保存できます）"))
         from .pickers import pick_set          # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
         name, monitor = pick_set(wc, load_config(), sets)
         if name is None:
@@ -126,8 +127,8 @@ def cmd_set(args):
             use_screen(find_screen(monitor))              # 小窓で選んだモニタを基準にして適用する（行に -m があればそちらが優先）
     elif name not in sets:
         if name in load_commands():
-            raise WinError(f"「{name}」はセットではありません（win run {shlex.quote(name)} で実行できます）")
-        raise WinError(f"セットが見つかりません: {name}（一覧は win set）")
+            raise WinError(tr("「{0}」はセットではありません（win run {1} で実行できます）").format(name, shlex.quote(name)))
+        raise WinError(tr("セットが見つかりません: {0}（一覧は win set）").format(name))
     return run_entry(sets[name])
 
 
@@ -135,7 +136,7 @@ def cmd_run(args):
     cmds = load_commands()
     if not args.name:
         if not cmds:
-            print("登録されたコマンドはありません（win config で作れます。窓の並びは win save でセットに）")
+            print(tr("登録されたコマンドはありません（win config で作れます。窓の並びは win save でセットに）"))
         for n, c in cmds.items():
             print(f"{n:<18} {c.get('type', 'win'):<8} {describe_command(c)}")
         return 0
@@ -143,7 +144,7 @@ def cmd_run(args):
     if c is None:
         c = load_sets().get(args.name)                        # 以前は run でセットも呼べたので、その呼び方も残す
     if c is None:
-        raise WinError(f"コマンドが見つかりません: {args.name}（一覧は win run、セットは win set）")
+        raise WinError(tr("コマンドが見つかりません: {0}（一覧は win run、セットは win set）").format(args.name))
     return run_entry(c)
 
 
@@ -170,4 +171,4 @@ def run_entry(c):
         for note in run_arrangement(WindowCalls(), c):
             print(note, file=sys.stderr)
         return 0
-    raise WinError(f"知らない種類です: {t}")
+    raise WinError(tr("知らない種類です: {0}").format(t))

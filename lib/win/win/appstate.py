@@ -13,7 +13,8 @@ import sys
 import time
 import unicodedata
 
-from .common import WinError
+from .common import NameExistsError, WinError
+from .i18n import tr
 from .screen import default_screen, load_config, work_area
 from .layouts import LayoutParser, leaf_rects
 from .dbus import WindowCalls, focused, normal_windows
@@ -28,7 +29,7 @@ from .sets import set_summary
 def mozlz4_loads(data):
     """Firefox の mozlz4（目印＋展開後の大きさ＋ lz4 のブロック）を展開して JSON を読む。"""
     if data[:8] != b"mozLz40\0":
-        raise ValueError("mozlz4 ではありません")
+        raise ValueError(tr("mozlz4 ではありません"))
     src, out, i = data[12:], bytearray(), 0
     while i < len(src):
         token = src[i]
@@ -83,13 +84,13 @@ def firefox_session_windows(profile=None):
     """Firefox のセッション（窓ごとのタブの一覧）。保存は 15 秒ほど遅れることがある。"""
     d = profile or firefox_profile_dir()
     if not d:
-        raise WinError("Firefox のプロファイルが見つかりません")
+        raise WinError(tr("Firefox のプロファイルが見つかりません"))
     for name in ("sessionstore-backups/recovery.jsonlz4", "sessionstore.jsonlz4"):
         path = os.path.join(d, name)
         if os.path.exists(path):
             with open(path, "rb") as f:
                 return mozlz4_loads(f.read()).get("windows", [])
-    raise WinError("Firefox のセッション情報が見つかりません")
+    raise WinError(tr("Firefox のセッション情報が見つかりません"))
 
 
 def _norm_title(t):
@@ -123,18 +124,18 @@ def firefox_state(windows, session=None):
     try:
         sess = firefox_session_windows() if session is None else session
     except (WinError, OSError, ValueError, KeyError, IndexError) as e:
-        return {}, [f"Firefox のタブを読めませんでした（{e}）"]
+        return {}, [tr("Firefox のタブを読めませんでした（{0}）").format(e)]
     out, notes, used = {}, [], set()
     for w in windows:
         title = _norm_title(w.get("title"))
         cands = [k for k, sw in enumerate(sess) if k not in used and firefox_window_title(sw) == title]
         if not cands:
-            notes.append(f"Firefox の窓「{title[:24]}」: セッションの窓と対応が取れませんでした（タブの保存は 15 秒ほど遅れます）")
+            notes.append(tr("Firefox の窓「{0}」: セッションの窓と対応が取れませんでした（タブの保存は 15 秒ほど遅れます）").format(title[:24]))
             continue
         used.add(cands[0])
         urls = firefox_tab_urls(sess[cands[0]])
         if not urls:
-            notes.append(f"Firefox の窓「{title[:24]}」: 保存できるタブがありません")
+            notes.append(tr("Firefox の窓「{0}」: 保存できるタブがありません").format(title[:24]))
             continue
         out[w["id"]] = "win browse " + " ".join(_url_arg(u) for u in urls)
     return out, notes
@@ -178,7 +179,7 @@ def terminal_state(windows, tabs=None):
     窓とタブの対応は、窓が 1 つのときと、題名（… ~/dir）から 1 対 1 に決まるときだけ取れる。"""
     tabs = ptyxis_tabs() if tabs is None else tabs
     if not tabs:
-        return {}, ["端末のタブの作業ディレクトリを読めませんでした"]
+        return {}, [tr("端末のタブの作業ディレクトリを読めませんでした")]
     home = os.path.expanduser("~")
     short = lambda d: "~" + d[len(home):] if d == home or d.startswith(home + "/") else d
     if len(windows) == 1:
@@ -188,10 +189,10 @@ def terminal_state(windows, tabs=None):
         title = (w.get("title") or "").strip()
         cands = [(n, d) for n, d in tabs if n not in used and title.endswith(short(d))]
         if len(cands) != 1:
-            return {}, ["端末の窓が複数あり、窓とタブの対応が取れないため、端末の状態は保存しません"]
+            return {}, [tr("端末の窓が複数あり、窓とタブの対応が取れないため、端末の状態は保存しません")]
         used.add(cands[0][0])
         out[w["id"]] = "win term " + shlex.quote(cands[0][1])
-    return out, ["端末の窓が複数あるため、各窓の表示中のタブの作業ディレクトリだけ保存します"]
+    return out, [tr("端末の窓が複数あるため、各窓の表示中のタブの作業ディレクトリだけ保存します")]
 
 
 def cmd_browse(args):
@@ -396,10 +397,10 @@ def find_stack(wc, n=0, stacks=None, screen=None):
         fid = focused(wc)["id"]
         st = next((s for s in stacks if any(w["id"] == fid for w in s["layers"])), None)
         if st is None:
-            raise WinError("前面の窓が、いまの並びのタイルの中にありません")
+            raise WinError(tr("前面の窓が、いまの並びのタイルの中にありません"))
         return st
     if not 1 <= n <= len(stacks):
-        raise WinError(f"タイル {n} がありません（いまの並びのタイルは {len(stacks)} 枚）")
+        raise WinError(tr("タイル {0} がありません（いまの並びのタイルは {1} 枚）").format(n, len(stacks)))
     return stacks[n - 1]
 
 
@@ -409,7 +410,7 @@ def cycle_stack(wc, n=0, d=1, screen=None):
     st = find_stack(wc, n, screen=screen)
     layers = st["layers"]
     if len(layers) < 2:
-        raise WinError(f"タイル {st['index']} に重なりはありません（窓は 1 枚）")
+        raise WinError(tr("タイル {0} に重なりはありません（窓は 1 枚）").format(st['index']))
     ids = [w["id"] for w in layers]
     w = layers[(ids.index(st["top"]) + d) % len(layers)]
     wc.simple("Activate", w["id"])
@@ -431,7 +432,7 @@ def arrangement_lines(wc, state=()):
     onmon, other, maxed, items, tree, dropped, by_id = (cur[k] for k in ("onmon", "other", "maxed", "items", "tree", "dropped", "by_id"))
     notes = []
     if other:
-        notes.append(f"別のモニタにある窓 {other} 枚は含めていません")
+        notes.append(tr("別のモニタにある窓 {0} 枚は含めていません").format(other))
 
     launch_cmds = {}                                          # 状態つきで起動するコマンド {窓の id: コマンド}
 
@@ -444,21 +445,21 @@ def arrangement_lines(wc, state=()):
     tiled = [t for t in onmon if t not in maxed]
     if not tiled:
         if not maxed:
-            raise WinError("保存できる窓がありません")
+            raise WinError(tr("保存できる窓がありません"))
         w = maxed[-1][1]
         if len(maxed) > 1:
-            notes.append(f"最大化している窓のうち、いちばん上の 1 枚だけ保存します（{len(maxed) - 1} 枚は含めていません）")
+            notes.append(tr("最大化している窓のうち、いちばん上の 1 枚だけ保存します（{0} 枚は含めていません）").format((len(maxed) - 1)))
         cls = w.get("wm_class") or str(w["id"])
         return [f"layout full {token(w)}", f"max -w {shlex.quote(cls)}"], notes, 1
     if maxed:
-        notes.append(f"最大化している窓 {len(maxed)} 枚は含めていません")
+        notes.append(tr("最大化している窓 {0} 枚は含めていません").format(len(maxed)))
     from .groups import load_groups        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
     gdata = load_groups(wc)
     in_group = {m["id"] for g in gdata.values() for m in g["members"]}
     dropped = [i for i in dropped if i not in in_group]              # グループのメンバーとして重なっている窓は、グループの行に書き出す
     if dropped:
         names = ", ".join(sorted({by_id[i].get("wm_class") or "?" for i in dropped}))
-        notes.append(f"重なっている窓 {len(dropped)} 枚は含めていません（{names}）。各タイルで、いちばん上の窓だけ保存します")
+        notes.append(tr("重なっている窓 {0} 枚は含めていません（{1}）。各タイルで、いちばん上の窓だけ保存します").format(len(dropped), names))
     kept = set(_tree_leaves(tree))
     kept_items = [it for it in items if it[0] in kept]
     kept_windows = [by_id[i] for i in kept]
@@ -466,14 +467,14 @@ def arrangement_lines(wc, state=()):
         if kind in state:
             targets = [w for w in kept_windows if (w.get("wm_class") or "") == cls]
             if not targets:
-                notes.append(f"{'Firefox' if kind == 'firefox' else '端末'} の窓がないため、状態は保存しません")
+                notes.append(tr("{0} の窓がないため、状態は保存しません").format(('Firefox' if kind == 'firefox' else tr('端末'))))
                 continue
             got, more = fn(targets)
             launch_cmds.update(got)
             notes += more
     area = sum((it[3] - it[1]) * (it[4] - it[2]) for it in kept_items)
     if area < 0.6:
-        notes.append("画面の一部しか使っていない並びです。呼ぶと、窓は画面いっぱいに広がります")
+        notes.append(tr("画面の一部しか使っていない並びです。呼ぶと、窓は画面いっぱいに広がります"))
     expr, order = tile_order(cur, cfg)
     defs, toks = [], []
     for i in order:
@@ -493,10 +494,10 @@ def save_arrangement(wc, name, overwrite=False, state=()):
     """いまの窓の並びを、型と窓の列の命令（セット）として name で保存する。(保存した窓の数, 注意のリスト) を返す。"""
     name = name.strip()
     if not name:
-        raise WinError("名前が空です")
+        raise WinError(tr("名前が空です"))
     sets = load_sets()
     if name in sets and not overwrite:
-        raise WinError(f"「{name}」はすでにあります（上書きするには --force）")
+        raise NameExistsError(tr("「{0}」はすでにあります（上書きするには --force）").format(name))
     lines, notes, count = arrangement_lines(wc, state)
     sets[name] = {"type": "win", "run": "\n".join(lines)}
     save_sets(sets)
@@ -526,10 +527,10 @@ def run_arrangement(wc, entry):
                 try:
                     w = launch(wc, e["launch"], 12)
                 except WinError as err:
-                    events.append(("note", f"{cls}: 起動できませんでした（{err}）"))
+                    events.append(("note", tr("{0}: 起動できませんでした（{1}）").format(cls, err)))
             if w is None:
                 if not e.get("launch"):
-                    events.append(("note", f"{cls}: 窓が見つかりません（起動コマンドも不明）"))
+                    events.append(("note", tr("{0}: 窓が見つかりません（起動コマンドも不明）").format(cls)))
                 continue
             used.add(w["id"])
             ent.add(wc, [w])
@@ -559,10 +560,10 @@ def cmd_save(args):
     state = ("firefox", "terminal") if "all" in (args.state or []) else tuple(args.state or [])
     n, notes = save_arrangement(wc, args.name, args.force, state)
     for note in notes:
-        print(f"注意: {note}", file=sys.stderr)
-    print(f"保存しました: 「{args.name}」（窓 {n} 枚）。呼び出すには: win set {shlex.quote(args.name)}")
+        print(tr("注意: {0}").format(note), file=sys.stderr)
+    print(tr("保存しました: 「{0}」（窓 {1} 枚）。呼び出すには: win set {2}").format(args.name, n, shlex.quote(args.name)))
     saved = load_sets()[args.name]
     print("  " + (set_summary(saved) if state else saved["run"]).replace("\n", "\n  "))     # 状態（URL など）は表示しない
     if any(parse_window_spec(t)[2] for t in shlex.split(saved["run"].replace("\n", " ")) if not t.startswith("!")):
-        print(f"  ※ 状態（タブの URL・作業ディレクトリ）は {SETS} に平文で保存されました")
+        print(tr("  ※ 状態（タブの URL・作業ディレクトリ）は {0} に平文で保存されました").format(SETS))
     return 0

@@ -15,7 +15,8 @@ win undo                          # put windows back where they were before the 
 
 Developed and tested only on **Ubuntu 26.04 (GNOME 50.1, Wayland)** with two monitors and a Japanese keyboard.
 Other GNOME versions and distributions may work but are untested; reports are welcome.
-**The user interface (dialogs, messages, `--help`) is in Japanese only.**
+The interface (dialogs, messages, `--help`) is available in **English and Japanese**. The language follows `LC_ALL`/`LC_MESSAGES`/`LANG`
+(Japanese if it starts with `ja`, English otherwise); set `WIN_LANG=ja` or `WIN_LANG=en` to override.
 
 <p align="center">
   <img src="docs/images/layout-dialog.png" alt="The layout picker: choose a layout, switch monitor with the arrow keys" width="48%">
@@ -92,7 +93,7 @@ nothing leaves your machine. `win stats off` turns it off, `win stats reset` del
 - With `workspaces-only-on-primary` enabled, windows on secondary monitors appear on every workspace and cannot be moved between them.
 - While the screen is locked, GNOME disables extensions and Window Calls does not respond.
 - Saving application state works for Firefox (tabs) and Ptyxis (working directories) only.
-- The interface is in Japanese.
+- Not translated: the nvim input box of `win prompt --nvim` (experimental). Text you write yourself (your extensions' docstrings, set names) stays as written.
 
 ## Development
 
@@ -100,9 +101,11 @@ nothing leaves your machine. `win stats off` turns it off, `win stats reset` del
 python3 tests/names.py lib/win/win/*.py   # undefined names and unused imports
 python3 tests/snapshot.py                 # runs pure functions and compares their output
 python3 tests/helper_test.py              # helper extension's D-Bus (needs gjs)
+python3 tests/i18n_check.py               # every tr("…") string has an English entry, with matching {placeholders}
 ```
 
-Design notes are in `docs/`. Personal settings (shortcuts, key layers, usage notes) are intentionally not part of this
+Interface strings are written in Japanese inside `tr("…")`; the English translations are in `lib/win/win/i18n_en.py`
+(add an entry there when you add a string). Design notes are in `docs/`. Personal settings (shortcuts, key layers, usage notes) are intentionally not part of this
 repository.
 
 ## License

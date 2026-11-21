@@ -11,13 +11,14 @@ import subprocess
 from typing import Any
 
 from .common import TILEPICK_APP_ID, WinError
+from .i18n import tr
 from .dbus import WindowCalls, usable_windows
 from .store import icon_for_class
 from .pickwin import center_and_focus
 from .placement import launch
 from .tilepick import launch_app, list_apps, spawn_tilepick
 
-HINT = "↑↓ 選択 ・ Enter 決定 ・ Esc 取り消す"
+HINT = tr("↑↓ 選択 ・ Enter 決定 ・ Esc 取り消す")
 
 
 @dataclasses.dataclass
@@ -63,7 +64,7 @@ class Dialog:
             if ev.kind == "key": d.notice("…")
     """
 
-    def __init__(self, title="", *, hint=HINT, placeholder="文字で絞り込み", filter=True, entry=True, ask=False, show_list=True,
+    def __init__(self, title="", *, hint=HINT, placeholder=tr("文字で絞り込み"), filter=True, entry=True, ask=False, show_list=True,
                  launch=False, highlight=False, keys=(), keep_selection=False, empty="", chip="", window_title="win",
                  vim=False, numbers=False, watch=False,
                  screen=None, wrap=None):
@@ -91,7 +92,7 @@ class Dialog:
             elif k in self.opts:
                 self.opts[k] = v
             else:
-                raise TypeError(f"知らない設定: {k}")
+                raise TypeError(tr("知らない設定: {0}").format(k))
 
     def map(self, m):
         """ミニ地図を差し替える（None で隠す）。"""
@@ -184,7 +185,7 @@ class Dialog:
                 elif act == "text":
                     ev = Event("text", text=res.get("text", ""))
                 elif act in ("app", "cmd"):
-                    self._send({"cmd": "busy", "text": "起動しています…"})
+                    self._send({"cmd": "busy", "text": tr("起動しています…")})
                     if act == "app":
                         w, cmdline = launch_app(self._wc, res["id"], 12)
                     else:
@@ -211,7 +212,7 @@ def window_items(wc, exclude=(), wrap=None):
             for w in usable_windows(wc) if w["id"] not in skip]
 
 
-def choose(title, items, *, preview=None, placeholder="文字で絞り込み", hint=HINT, filter=True, screen=None):
+def choose(title, items, *, preview=None, placeholder=tr("文字で絞り込み"), hint=HINT, filter=True, screen=None):
     """一覧から 1 つ選ぶ。選んだ Item、取り消したら None。preview(item) -> Map を渡すと、選択が動くたびに地図を出す。"""
     items = list(items)
     with Dialog(title, hint=hint, placeholder=placeholder, filter=filter, highlight=preview is not None, screen=screen) as d:
@@ -228,9 +229,9 @@ def choose(title, items, *, preview=None, placeholder="文字で絞り込み", h
     return None
 
 
-def confirm(title, text="", *, yes="はい", no="いいえ", screen=None):
+def confirm(title, text="", *, yes=tr("はい"), no=tr("いいえ"), screen=None):
     """はい・いいえを選ぶ。はいなら True（Esc は False）。"""
-    with Dialog(title, hint="↑↓ 選択 ・ Enter 決定 ・ Esc いいえ", entry=False, screen=screen) as d:
+    with Dialog(title, hint=tr("↑↓ 選択 ・ Enter 決定 ・ Esc いいえ"), entry=False, screen=screen) as d:
         d.rows([Item(yes, text), Item(no)])
         for ev in d.events():
             if ev.kind == "select":
@@ -240,7 +241,7 @@ def confirm(title, text="", *, yes="はい", no="いいえ", screen=None):
     return False
 
 
-def ask(title, *, placeholder="", initial="", hint="Enter 決定 ・ Esc 取り消す", screen=None):
+def ask(title, *, placeholder="", initial="", hint=tr("Enter 決定 ・ Esc 取り消す"), screen=None):
     """1 行の文字を入力する。入力した文字、取り消したら None。"""
     with Dialog(title, hint=hint, placeholder=placeholder, ask=True, show_list=False, screen=screen) as d:
         d.text(initial)
@@ -265,9 +266,9 @@ def move_toward(rects, index, key):
 def pick_tile(title, rects, *, labels=None, current=0, free=None, monitor=None, screen=None):
     """ミニ地図の上でタイルを選ぶ（矢印キーで、その向きの隣のタイルへ）。選んだタイルの添字、取り消したら None。"""
     cur = current
-    with Dialog(title, hint="←↑↓→ 動かす ・ Enter 決定 ・ Esc 取り消す", entry=False, show_list=False,
+    with Dialog(title, hint=tr("←↑↓→ 動かす ・ Enter 決定 ・ Esc 取り消す"), entry=False, show_list=False,
                 keys=("Left", "Right", "Up", "Down"), screen=screen) as d:
-        d.rows([Item("ここに決める")])
+        d.rows([Item(tr("ここに決める"))])
         d.map(Map(rects, labels, cur, free, monitor))
         for ev in d.events():
             if ev.kind == "key":
@@ -280,10 +281,10 @@ def pick_tile(title, rects, *, labels=None, current=0, free=None, monitor=None, 
     return None
 
 
-def pick_window(title="窓を選ぶ", *, launch=True, exclude=(), map=None, screen=None, wrap=None):
+def pick_window(title=tr("窓を選ぶ"), *, launch=True, exclude=(), map=None, screen=None, wrap=None):
     """窓を 1 枚選ぶ（launch なら、先頭 ! でアプリを起動してその窓）。選んだ窓、取り消したら None。map（Map）で地図も出せる。"""
-    with Dialog(title, hint="↑↓ 選択 ・ Enter 決定" + (" ・ 先頭 ! でアプリを探して新しく起動" if launch else "") + " ・ Esc 取り消す",
-                placeholder="文字で絞り込み　先頭に！でアプリを探して新規起動" if launch else "文字で絞り込み",
+    with Dialog(title, hint=tr("↑↓ 選択 ・ Enter 決定") + (tr(" ・ 先頭 ! でアプリを探して新しく起動") if launch else "") + tr(" ・ Esc 取り消す"),
+                placeholder=tr("文字で絞り込み　先頭に！でアプリを探して新規起動") if launch else tr("文字で絞り込み"),
                 launch=launch, screen=screen, wrap=wrap) as d:
         d.rows(window_items(d._wc, exclude, wrap))
         d.map(map)

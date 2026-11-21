@@ -3,6 +3,7 @@
 import time
 
 from .common import CONFIG, WinError
+from .i18n import tr
 from .screen import load_config
 from .layouts import LayoutParser, leaf_rects
 from .dbus import WindowCalls, find_windows, is_multi, normal_windows, targets
@@ -33,8 +34,8 @@ def cmd_layouts(args):
     cfg = load_config()
     for name, expr in cfg["layouts"].items():
         n = len(leaf_rects(LayoutParser(expr).parse(), (0, 0, 1, 1)))
-        print(f"{name:<10} {expr:<24} タイル {n} 枚")
-    print(f"\n作業領域の余白: {cfg['insets']}  タイル間の隙間: {cfg['gap']}px  設定: {CONFIG}")
+        print(tr("{0:<10} {1:<24} タイル {2} 枚").format(name, expr, n))
+    print(tr("\n作業領域の余白: {0}  タイル間の隙間: {1}px  設定: {2}").format(cfg['insets'], cfg['gap'], CONFIG))
     return 0
 
 
@@ -46,7 +47,7 @@ def cmd_focus(args):
         if not found:
             cmdline = fallback or launch_for_class(base)
             if not cmdline:
-                raise WinError(f"窓が見つからず、起動コマンドも分かりません: {base}")
+                raise WinError(tr("窓が見つからず、起動コマンドも分かりません: {0}").format(base))
             found = [launch(wc, cmdline)]
         else:
             front = next((w for w in normal_windows(wc) if w.get("focus")), None)
@@ -54,7 +55,7 @@ def cmd_focus(args):
             if front is not None and front["id"] in {w["id"] for w in ordered} and len(ordered) > 1:
                 found = [ordered[([w["id"] for w in ordered].index(front["id"]) + 1) % len(ordered)]]
     if not found:
-        raise WinError(f"窓が見つかりません: {args.selector}")
+        raise WinError(tr("窓が見つかりません: {0}").format(args.selector))
     group = found if is_multi(args.selector) else found[:1]       # 複数の指定なら全部を前面へ（先頭がいちばん上）
     for w in reversed(group):
         if wc.details(w["id"]).get("minimized"):
@@ -76,7 +77,7 @@ def cmd_desktop(args):
         here = next((w.get("workspace", 0) + 1 for w in normal_windows(wc) if w.get("in_current_workspace")), None)
         for n in sorted(by):
             names = ", ".join((w.get("wm_class") or "?") for w in by[n])
-            print(f"デスクトップ {n}{'（いま）' if n == here else ''}: {len(by[n])} 枚  {names}")
+            print(tr("デスクトップ {0}{1}: {2} 枚  {3}").format(n, (tr('（いま）') if n == here else ''), len(by[n]), names))
         return 0
     if t in ("next", "prev"):
         switch_relative(1 if t == "next" else -1)
@@ -84,10 +85,10 @@ def cmd_desktop(args):
         try:
             n = int(t)
         except ValueError:
-            raise WinError(f"デスクトップの番号（1 から）か next・prev・list を指定してください: {t}")
+            raise WinError(tr("デスクトップの番号（1 から）か next・prev・list を指定してください: {0}").format(t))
         switch_desktop(n)
     cur, count = desktops()
-    print(f"デスクトップ {cur}/{count}")
+    print(tr("デスクトップ {0}/{1}").format(cur, count))
     return 0
 
 
@@ -99,17 +100,17 @@ def cmd_stats(args):
     if w == "off":
         os.makedirs(os.path.dirname(OFF_FILE), exist_ok=True)
         open(OFF_FILE, "w").close()
-        print("記録を止めました（再開は win stats on）")
+        print(tr("記録を止めました（再開は win stats on）"))
         return 0
     if w == "on":
         if os.path.exists(OFF_FILE):
             os.remove(OFF_FILE)
-        print("記録を再開しました")
+        print(tr("記録を再開しました"))
         return 0
     if w == "reset":
         if os.path.exists(USAGE_FILE):
             os.remove(USAGE_FILE)
-        print("記録を消しました")
+        print(tr("記録を消しました"))
         return 0
     if w == "path":
         print(USAGE_FILE)
@@ -117,15 +118,15 @@ def cmd_stats(args):
     try:
         days = int(w)
     except ValueError:
-        raise WinError(f"日数（整数）か on・off・reset・path を指定してください: {w}")
+        raise WinError(tr("日数（整数）か on・off・reset・path を指定してください: {0}").format(w))
     rows = read_usage(days)
-    state = "止めています" if os.path.exists(OFF_FILE) else "記録中"
+    state = tr("止めています") if os.path.exists(OFF_FILE) else tr("記録中")
     if not rows:
-        print(f"直近 {days} 日の記録はありません（{state}。記録の場所: {USAGE_FILE}）")
+        print(tr("直近 {0} 日の記録はありません（{1}。記録の場所: {2}）").format(days, state, USAGE_FILE))
         return 0
     summary = summarize(rows)
-    print(f"直近 {days} 日: {len(rows)} 回（{state}）")
-    print(f"  {'コマンド':<14}{'合計':>6}{'キー':>6}{'手入力':>7}{'日数':>6}")
+    print(tr("直近 {0} 日: {1} 回（{2}）").format(days, len(rows), state))
+    print(f"  {tr('コマンド'):<14}{tr('合計'):>6}{tr('キー'):>6}{tr('手入力'):>7}{tr('日数'):>6}")
     for c, s in summary:
         print(f"  {c:<14}{s['total']:>6}{s['key']:>6}{s['typed']:>7}{s['days']:>6}")
     return 0
@@ -140,15 +141,15 @@ def cmd_shortcuts(args):
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
-            print(f"書き出しました: {path}（{text.count('[[shortcut]]')} 件）")
+            print(tr("書き出しました: {0}（{1} 件）").format(path, text.count('[[shortcut]]')))
         else:
             print(text)
         return 0
     if act == "apply":
         changes = apply_shortcuts(path, dry_run=args.dry_run, prune=args.prune)
         for c in changes:
-            print(("（反映しない）" if args.dry_run else "") + c)
-        print(f"{'変更の予定' if args.dry_run else '変更'}: {len(changes)} 件（ファイル: {path or SHORTCUTS_FILE}）")
+            print((tr("（反映しない）") if args.dry_run else "") + c)
+        print(tr("{0}: {1} 件（ファイル: {2}）").format((tr('変更の予定') if args.dry_run else tr('変更')), len(changes), (path or SHORTCUTS_FILE)))
         return 0
     for e in kb_list():
         print(f"{e['binding']:28s} {portable_command(e['command'])}")
@@ -163,7 +164,7 @@ def cmd_send(args):
     screens = [Screen(r, lm[4], lm[5][0][0]) for lm, r in sorted(((lm, logical_rect(lm, monitors)) for lm in logical),
                                                                   key=lambda t: (t[1][0], t[1][1]))]      # 左から右へ
     if len(screens) < 2:
-        raise WinError("モニタが 1 枚だけです")
+        raise WinError(tr("モニタが 1 枚だけです"))
     wins = targets(wc, args.window)
     ent = begin(wc, "send")
     ent.add(wc, wins)                                                  # 動かす前の状態。実際に動かしたときだけ記録する
@@ -184,9 +185,9 @@ def cmd_send(args):
         else:
             dst = next((k for k, s in enumerate(screens) if s.name == t), None)
             if dst is None:
-                raise WinError(f"モニタが見つかりません: {t}（使えるのは next・prev・primary・{'・'.join(s.name for s in screens)}）")
+                raise WinError(tr("モニタが見つかりません: {0}（使えるのは next・prev・primary・{1}）").format(t, tr('・').join(s.name for s in screens)))
         if dst == cur:
-            print(f"すでに {screens[dst].name} にあります")
+            print(tr("すでに {0} にあります").format(screens[dst].name))
             continue
         moved = True
         sx, sy, sw, sh = screens[cur].work_area(cfg)
@@ -216,10 +217,10 @@ def cmd_undo(args):
     if args.what == "list":
         rows = entries()
         if not rows:
-            print("元に戻せる操作はありません")
+            print(tr("元に戻せる操作はありません"))
         for k, e in enumerate(rows):
-            print(f"{'→ ' if k == 0 else '  '}{time.strftime('%H:%M:%S', time.localtime(e['t']))}  {e['what']}（{len(e['windows'])} 枚）")
+            print(tr("{0}{1}  {2}（{3} 枚）").format(('→ ' if k == 0 else '  '), time.strftime('%H:%M:%S', time.localtime(e['t'])), e['what'], len(e['windows'])))
         return 0
     what, n, gone = undo_last(wc)
-    print(f"元に戻しました: {what}（{n} 枚" + (f"、閉じていた {gone} 枚は戻せません" if gone else "") + "）")
+    print(tr("元に戻しました: {0}（{1} 枚").format(what, n) + (tr("、閉じていた {0} 枚は戻せません").format(gone) if gone else "") + "）")
     return 0

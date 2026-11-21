@@ -5,6 +5,7 @@ from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import NVPROMPT_APP_ID, PROMPT_APP_ID, TILEPICK_APP_ID, TILE_APP_ID, WC_IFACE, WC_NAME, WC_PATH, WinError
+from .i18n import tr
 from .screen import display_state, load_config, logical_rect
 
 
@@ -15,14 +16,14 @@ class WindowCalls:
                 Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
                 WC_NAME, WC_PATH, WC_IFACE, None)
         except GLib.Error as e:
-            raise WinError(f"GNOME Shell に接続できません: {e.message}")
+            raise WinError(tr("GNOME Shell に接続できません: {0}").format(e.message))
 
     def call(self, method, fmt=None, *args):
         params = GLib.Variant(f"({fmt})", args) if fmt else None
         try:
             return self.proxy.call_sync(method, params, Gio.DBusCallFlags.NONE, 5000, None).unpack()
         except GLib.Error as e:
-            raise WinError(f"Window Calls の {method} が失敗しました（拡張が無効かもしれません）: {e.message}")
+            raise WinError(tr("Window Calls の {0} が失敗しました（拡張が無効かもしれません）: {1}").format(method, e.message))
 
     def list(self):
         return json.loads(self.call("List")[0])
@@ -95,7 +96,7 @@ def focused(wc):
     for w in normal_windows(wc):
         if w.get("focus"):
             return w
-    raise WinError("前面の窓が見つかりません（-w で窓を指定してください）")
+    raise WinError(tr("前面の窓が見つかりません（-w で窓を指定してください）"))
 
 
 def targets(wc, sel):
@@ -103,7 +104,7 @@ def targets(wc, sel):
     if sel is not None and is_multi(sel):
         found = find_windows(wc, sel)
         if not found:
-            raise WinError(f"窓が見つかりません: {sel}")
+            raise WinError(tr("窓が見つかりません: {0}").format(sel))
         return found
     return [target(wc, sel)]
 
@@ -113,25 +114,25 @@ def target(wc, sel):
         return focused(wc)
     found = find_windows(wc, sel, normal_windows(wc)[::-1])
     if not found:
-        raise WinError(f"窓が見つかりません: {sel}")
+        raise WinError(tr("窓が見つかりません: {0}").format(sel))
     return found[0]
 
 
 # 位置・状態で窓を選ぶ指定（窓の指定を書ける所ならどこでも使える）
 AT_SELECTORS = [
-    ("@focused", "前面の窓"),
-    ("@prev", "前面の窓の次に手前にある窓（たいてい直前に使っていた窓）"),
-    ("@left", "前面の窓の左にある窓（nav と同じ判定）"), ("@right", "前面の窓の右にある窓"),
-    ("@up", "前面の窓の上にある窓"), ("@down", "前面の窓の下にある窓"),
-    ("@largest", "見えている窓のうち、いちばん大きい窓"), ("@smallest", "見えている窓のうち、いちばん小さい窓"),
-    ("@monitor:", "そのモニタでいちばん手前の窓（@monitor:primary・@monitor:eDP-1 など。@monitor:other は、前面の窓がいるのとは別のモニタ）"),
-    ("@slot:", "いまの並び（窓の位置から逆算）の N 番目のタイルの窓（@slot:1 など。番号は layout の窓の列と同じ順。@slot:0 は前面の窓）"),
-    ("@visible", "【複数】見えている窓すべて（前面に近い順）"),
-    ("@others", "【複数】前面の窓以外の、見えている窓すべて"),
-    ("@all", "【複数】このワークスペースの窓すべて（最小化も含む）"),
-    ("@class:", "【複数】そのクラスの窓すべて（@class:firefox など。大文字小文字は区別しない）"),
-    ("@group:", "名前のグループの、手前のメンバー（@group:作業 など）。layout の窓の列では、グループ全体を 1 つのタイルに置く"),
-    ("@pick", "その場で選ぶ（layout -i と同じ小窓。先頭 ! でアプリを起動して、その窓。Esc で命令ごと取り消す）"),
+    ("@focused", tr("前面の窓")),
+    ("@prev", tr("前面の窓の次に手前にある窓（たいてい直前に使っていた窓）")),
+    ("@left", tr("前面の窓の左にある窓（nav と同じ判定）")), ("@right", tr("前面の窓の右にある窓")),
+    ("@up", tr("前面の窓の上にある窓")), ("@down", tr("前面の窓の下にある窓")),
+    ("@largest", tr("見えている窓のうち、いちばん大きい窓")), ("@smallest", tr("見えている窓のうち、いちばん小さい窓")),
+    ("@monitor:", tr("そのモニタでいちばん手前の窓（@monitor:primary・@monitor:eDP-1 など。@monitor:other は、前面の窓がいるのとは別のモニタ）")),
+    ("@slot:", tr("いまの並び（窓の位置から逆算）の N 番目のタイルの窓（@slot:1 など。番号は layout の窓の列と同じ順。@slot:0 は前面の窓）")),
+    ("@visible", tr("【複数】見えている窓すべて（前面に近い順）")),
+    ("@others", tr("【複数】前面の窓以外の、見えている窓すべて")),
+    ("@all", tr("【複数】このワークスペースの窓すべて（最小化も含む）")),
+    ("@class:", tr("【複数】そのクラスの窓すべて（@class:firefox など。大文字小文字は区別しない）")),
+    ("@group:", tr("名前のグループの、手前のメンバー（@group:作業 など）。layout の窓の列では、グループ全体を 1 つのタイルに置く")),
+    ("@pick", tr("その場で選ぶ（layout -i と同じ小窓。先頭 ! でアプリを起動して、その窓。Esc で命令ごと取り消す）")),
 ]
 
 
@@ -162,13 +163,13 @@ def at_windows(wc, sel):
     if key == "@pick":
         w = pick_window_map(wc)
         if w is None:
-            raise WinError("@pick: 選ぶのを取り消しました")
+            raise WinError(tr("@pick: 選ぶのを取り消しました"))
         return [w]
     if key.startswith("@slot:"):
         try:
             k = int(key.split(":", 1)[1])
         except ValueError:
-            raise WinError(f"@slot: の後は番号です（@slot:1 など）: {sel}")
+            raise WinError(tr("@slot: の後は番号です（@slot:1 など）: {0}").format(sel))
         if k == 0:                                        # 0 は前面の窓（番号だけで「いまの窓」を指せるように）
             w = at_window(wc, "@focused")
             return [] if w is None else [w]
@@ -225,11 +226,11 @@ def at_window(wc, sel):
             hit = next((r for lm, r in rects if (name == "primary" and lm[4]) or name in [c[0] for c in lm[5]]), None)
         if hit is None:
             names = [c[0] for lm, _ in rects for c in lm[5]]
-            raise WinError(f"モニタが見つかりません: {name}（使えるのは primary, {', '.join(names)}）")
+            raise WinError(tr("モニタが見つかりません: {0}（使えるのは primary, {1}）").format(name, ', '.join(names)))
         mx, my, mw, mh = hit
         for w in usable_windows(wc):                          # 前面に近い順
             x, y, rw, rh = wc.rect(w["id"])
             if mx <= x + rw / 2 < mx + mw and my <= y + rh / 2 < my + mh:
                 return w
         return None
-    raise WinError(f"知らない指定です: {sel}（使えるのは {', '.join(s for s, _ in AT_SELECTORS)}）")
+    raise WinError(tr("知らない指定です: {0}（使えるのは {1}）").format(sel, ', '.join(s for s, _ in AT_SELECTORS)))

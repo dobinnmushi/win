@@ -5,6 +5,7 @@ import shlex
 import time
 
 from .common import WinError
+from .i18n import tr
 from .screen import default_screen, find_screen, load_config
 from .layouts import compute_rects, is_shorthand_layout, resolve_layout
 from .dbus import focused, normal_windows, selector_for, usable_windows
@@ -16,9 +17,9 @@ from .tilepick import fuzzy
 from .dialog import Dialog, Item, Map, window_items
 from .undo import begin
 
-TILE_PLACEHOLDER = "文字で絞り込み　先頭に ! でアプリを探して新規起動"
-TILE_HINT = "↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 ・ Ctrl+S 空ける ・ Ctrl+B 戻る ・ Esc 終了"
-LAYOUT_PLACEHOLDER = "型の名前で絞り込み（式も打てます: 1,2,2・1/1・v(1,h(1,1)) など）"
+TILE_PLACEHOLDER = tr("文字で絞り込み　先頭に ! でアプリを探して新規起動")
+TILE_HINT = tr("↑↓ 選択 ・ Enter 決定 ・ Tab 決定して残りを自動 ・ Ctrl+S 空ける ・ Ctrl+B 戻る ・ Esc 終了")
+LAYOUT_PLACEHOLDER = tr("型の名前で絞り込み（式も打てます: 1,2,2・1/1・v(1,h(1,1)) など）")
 
 
 def layout_candidates(text, items):
@@ -31,9 +32,9 @@ def layout_candidates(text, items):
             scored.append((-sc, k, it))
     scored.sort(key=lambda t: (t[0], t[1]))
     rows = [{"act": {"act": "layout", "name": it["name"]}, "title": it["name"],
-             "sub": f"{it['expr']}　{it['n']}枚", "icon": None, "rects": it["rects"]} for _, _, it in scored]
+             "sub": tr("{0}　{1}枚").format(it['expr'], it['n']), "icon": None, "rects": it["rects"]} for _, _, it in scored]
     if re.match(r"(full|[vh]\s*\()", q) or is_shorthand_layout(q):        # 略記（1,2,2 や 1/1 など）も式として使える
-        rows.append({"act": {"act": "layout", "name": q}, "title": f"式として使う: {q}", "sub": "", "icon": None,
+        rows.append({"act": {"act": "layout", "name": q}, "title": tr("式として使う: {0}").format(q), "sub": "", "icon": None,
                      "rects": []})
     return rows
 
@@ -41,7 +42,7 @@ def layout_candidates(text, items):
 def gui_layout_flow(wc, args, cfg, area, gap):
     """型の名前なしで呼ばれたとき: 小窓で型を選び、Enter ならタイルごとの選択へ、Tab なら前面の窓で自動配置。"""
     if args.windows or args.dry_run:
-        raise WinError("型を省くときは、窓の指定や -n は使えません")
+        raise WinError(tr("型を省くときは、窓の指定や -n は使えません"))
     ax, ay, aw, ah = area
     items = []
     for name, expr in cfg["layouts"].items():
@@ -52,7 +53,7 @@ def gui_layout_flow(wc, args, cfg, area, gap):
     many = len(mons) > 1
 
     def title():
-        return "型を選ぶ" + (f"（並べる先: {mons[mon]['name']}）" if many else "")
+        return tr("型を選ぶ") + (tr("（並べる先: {0}）").format(mons[mon]['name']) if many else "")
 
     def rows(text):
         cands = layout_candidates(text, items)
@@ -62,10 +63,10 @@ def gui_layout_flow(wc, args, cfg, area, gap):
         return Map(cand["rects"], None, -1, None, mon) if cand and cand["rects"] else None
 
     chosen = None                                     # (型の名前, 式, rects, Tab で残りを自動か)
-    with Dialog(title(), window_title="窓を並べる", watch=True, filter=False, highlight=True, chip="型",
+    with Dialog(title(), window_title=tr("窓を並べる"), watch=True, filter=False, highlight=True, chip=tr("型"),
                 keys=("Left", "Right") if many else (), placeholder=LAYOUT_PLACEHOLDER,
-                hint="↑↓ 選択（ミニ地図が変わる）" + (" ・ ←→ 並べる先のモニタ" if many else "")
-                     + " ・ Enter 決定してタイルごとに選ぶ ・ Tab 決定して前面の窓で自動配置 ・ Esc 閉じる") as d:
+                hint=tr("↑↓ 選択（ミニ地図が変わる）") + (tr(" ・ ←→ 並べる先のモニタ") if many else "")
+                     + tr(" ・ Enter 決定してタイルごとに選ぶ ・ Tab 決定して前面の窓で自動配置 ・ Esc 閉じる")) as d:
         cands, its = rows("")
         d.rows(its)
         d.map(preview(cands[0] if cands else None))
@@ -116,7 +117,7 @@ def gui_interactive(wc, args, expr, rects, area):
     """型は決まっているとき（win layout 型 -i）: タイルごとに窓を選ぶ小窓。"""
     screen = find_screen(args.monitor) if getattr(args, "monitor", None) else default_screen()
     mon = monitors_for_preview(load_config(), screen)[1]
-    with Dialog("", window_title="窓を並べる", screen=screen) as d:
+    with Dialog("", window_title=tr("窓を並べる"), screen=screen) as d:
         state = tile_loop(wc, args, d, rects, area, mon)
     return finish_layout(wc, args, *state)
 
@@ -132,7 +133,7 @@ def tile_loop(wc, args, d, rects, area, mon):
         me = None
     assigned = [None] * n                    # (窓, 再現用の指定) か None
     procs = start_placeholders(wc, rects) if args.preview else []
-    d.options(window_title="窓を並べる", watch=False, filter=True, highlight=False, launch=True, chip="開いている窓",
+    d.options(window_title=tr("窓を並べる"), watch=False, filter=True, highlight=False, launch=True, chip=tr("開いている窓"),
               placeholder=TILE_PLACEHOLDER, hint=TILE_HINT)
     d.keys("Ctrl+s", "Ctrl+b")
 
@@ -141,11 +142,11 @@ def tile_loop(wc, args, d, rects, area, mon):
     def place_checked(w, i):
         ent.add(wc, [w])
         got = place_settled(wc, w["id"], rects[i])
-        return (f"タイル {i + 1} の窓は希望の大きさにならず {got[2]}x{got[3]} です（最小サイズなど）" if got else "")
+        return (tr("タイル {0} の窓は希望の大きさにならず {1}x{2} です（最小サイズなど）").format((i + 1), got[2], got[3]) if got else "")
 
     def show(i, notice=""):
         taken = [a[0]["id"] for a in assigned if a]
-        d.options(title=f"タイル {i + 1} / {n}　{args.layout}")
+        d.options(title=tr("タイル {0} / {1}　{2}").format((i + 1), n, args.layout))
         d.text("")                                   # 入力欄は、タイルごとに空にする
         d.rows(window_items(wc, taken))
         d.map(Map(norm, [(a[0].get("wm_class") or "")[:14] if a else "" for a in assigned], i, None, mon))
@@ -160,7 +161,7 @@ def tile_loop(wc, args, d, rects, area, mon):
         if ev.kind == "select" and ev.item is not None:
             w = next((x for x in normal_windows(wc) if x["id"] == ev.item.value["id"]), None)
             if w is None:
-                show(i, "その窓はもう閉じられました")
+                show(i, tr("その窓はもう閉じられました"))
                 continue
             chosen = (w, selector_for(w, normal_windows(wc)))
         elif ev.kind == "launched":
@@ -209,6 +210,6 @@ def finish_layout(wc, args, assigned, auto_from, procs, me, n):
         recipe = "layout " + shlex.quote(args.layout) + " " + " ".join(toks)
         if getattr(args, "monitor", None):
             recipe += " -m " + shlex.quote(args.monitor)
-        print("同じ配置を再現するコマンド:\n  win " + recipe)
+        print(tr("同じ配置を再現するコマンド:\n  win ") + recipe)
         save_history(recipe)
     return 0

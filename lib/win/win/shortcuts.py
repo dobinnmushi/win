@@ -11,6 +11,7 @@ from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import WinError
+from .i18n import tr
 
 
 
@@ -27,41 +28,41 @@ WIN_BIN = os.path.abspath(sys.argv[0])  # 起動役（~/.local/bin/win）。子�
 
 
 # ショートカット画面のグループ（目的別。実装の種類 — 組み込み・拡張・コマンド・セット — では分けない）
-G_MOVE, G_ARRANGE, G_SET, G_CMD, G_OTHER = "窓を選ぶ・移る", "窓を並べる・置く", "保存した並び（セット）", "コマンド", "その他の操作"
+G_MOVE, G_ARRANGE, G_SET, G_CMD, G_OTHER = tr("窓を選ぶ・移る"), tr("窓を並べる・置く"), tr("保存した並び（セット）"), tr("コマンド"), tr("その他の操作")
 
 
 ACTION_GROUPS = [
-    (G_MOVE, "窓を選んで前面に出す、フォーカスを移す操作です。"),
-    (G_ARRANGE, "窓を型で並べる、置き先に重ねる操作です。"),
-    (G_SET, "「セット」ページで保存した窓の並びを呼びます。"),
-    (G_CMD, "「コマンド」ページで作ったコマンドを呼びます。"),
-    (G_OTHER, "上のどれにも入らない、win の操作と拡張の命令です。"),
+    (G_MOVE, tr("窓を選んで前面に出す、フォーカスを移す操作です。")),
+    (G_ARRANGE, tr("窓を型で並べる、置き先に重ねる操作です。")),
+    (G_SET, tr("「セット」ページで保存した窓の並びを呼びます。")),
+    (G_CMD, tr("「コマンド」ページで作ったコマンドを呼びます。")),
+    (G_OTHER, tr("上のどれにも入らない、win の操作と拡張の命令です。")),
 ]
 
 
 # win の標準の操作（slug, 表示名, 引数, グループ）。slug は dconf の項目名。既定のキーは持たない（割り当ては presets/ か自分の shortcuts.toml）
 WIN_ACTIONS = [
-    ("win-pick", "窓を選んで前面に出す", "pick", G_MOVE),
-    ("win-prompt", "コマンドを入力して窓を操作", "prompt", G_CMD),
-    ("win-nav-prev-d", "前の窓へ（左手）", "nav prev", G_MOVE),
-    ("win-nav-next-f", "次の窓へ（左手）", "nav next", G_MOVE),
-    ("win-focus-prev", "直前の窓へ（交互に切り替える）", "focus @prev", G_MOVE),
-    ("win-focus-other-monitor", "反対側のモニタの窓へ", "focus @monitor:other", G_MOVE),
-    ("win-stack-prev", "重なった窓の、前の層を表示", "stack prev", G_MOVE),
-    ("win-group-prev", "グループの、前のメンバーを表示", "group prev", G_MOVE),
-    ("win-send", "窓を、別のモニタへ送る", "send", G_ARRANGE),
-    ("win-undo", "直前の操作を元に戻す", "undo", G_ARRANGE),
-    ("win-stack-next", "重なった窓の、次の層を表示", "stack next", G_MOVE),
-    ("win-stack-list", "重なった窓の層を、一覧から選ぶ", "stack list", G_MOVE),
-    ("win-group-next", "グループの、次のメンバーを表示", "group next", G_MOVE),
-    ("win-group-select", "グループのメンバーを、一覧から選ぶ", "group select", G_MOVE),
-    ("win-layout", "型を選んで窓を並べる", "layout", G_ARRANGE),
-    ("win-here", "選んだ窓を今の窓と同じ形にする", "here", G_ARRANGE),
-    ("win-set", "保存した並び（セット）を選んで適用", "set", G_SET),
-    ("win-nav-next", "次の窓へ（いまの並びの番号順）", "nav next", G_MOVE),
-    ("win-nav-prev", "前の窓へ（いまの並びの番号順）", "nav prev", G_MOVE),
-    *[(f"win-slot-{n}", f"{n} 番目のタイルの窓へ", f"focus @slot:{n}", G_MOVE) for n in range(1, 10)],
-    ("win-config", "win の設定を開く", "config", G_OTHER),
+    ("win-pick", tr("窓を選んで前面に出す"), "pick", G_MOVE),
+    ("win-prompt", tr("コマンドを入力して窓を操作"), "prompt", G_CMD),
+    ("win-nav-prev-d", tr("前の窓へ（左手）"), "nav prev", G_MOVE),
+    ("win-nav-next-f", tr("次の窓へ（左手）"), "nav next", G_MOVE),
+    ("win-focus-prev", tr("直前の窓へ（交互に切り替える）"), "focus @prev", G_MOVE),
+    ("win-focus-other-monitor", tr("反対側のモニタの窓へ"), "focus @monitor:other", G_MOVE),
+    ("win-stack-prev", tr("重なった窓の、前の層を表示"), "stack prev", G_MOVE),
+    ("win-group-prev", tr("グループの、前のメンバーを表示"), "group prev", G_MOVE),
+    ("win-send", tr("窓を、別のモニタへ送る"), "send", G_ARRANGE),
+    ("win-undo", tr("直前の操作を元に戻す"), "undo", G_ARRANGE),
+    ("win-stack-next", tr("重なった窓の、次の層を表示"), "stack next", G_MOVE),
+    ("win-stack-list", tr("重なった窓の層を、一覧から選ぶ"), "stack list", G_MOVE),
+    ("win-group-next", tr("グループの、次のメンバーを表示"), "group next", G_MOVE),
+    ("win-group-select", tr("グループのメンバーを、一覧から選ぶ"), "group select", G_MOVE),
+    ("win-layout", tr("型を選んで窓を並べる"), "layout", G_ARRANGE),
+    ("win-here", tr("選んだ窓を今の窓と同じ形にする"), "here", G_ARRANGE),
+    ("win-set", tr("保存した並び（セット）を選んで適用"), "set", G_SET),
+    ("win-nav-next", tr("次の窓へ（いまの並びの番号順）"), "nav next", G_MOVE),
+    ("win-nav-prev", tr("前の窓へ（いまの並びの番号順）"), "nav prev", G_MOVE),
+    *[(f"win-slot-{n}", tr("{0} 番目のタイルの窓へ").format(n), f"focus @slot:{n}", G_MOVE) for n in range(1, 10)],
+    ("win-config", tr("win の設定を開く"), "config", G_OTHER),
 ]
 
 
@@ -152,8 +153,8 @@ def _toml_str(s):
 
 def export_shortcuts():
     """いまの GNOME のカスタムショートカットすべてを、shortcuts.toml の文字列にする（slug の順）。"""
-    out = ["# win のショートカット（GNOME のカスタムショートカット）。`win shortcuts apply` で GNOME に反映する。",
-           "# command の先頭の `win` は、反映のとき、導入した win の実体に置き換わる。", ""]
+    out = [tr("# win のショートカット（GNOME のカスタムショートカット）。`win shortcuts apply` で GNOME に反映する。"),
+           tr("# command の先頭の `win` は、反映のとき、導入した win の実体に置き換わる。"), ""]
     for e in sorted(kb_list(), key=lambda e: e["slug"]):
         out += ["[[shortcut]]", f"slug = {_toml_str(e['slug'])}", f"name = {_toml_str(e['name'])}",
                 f"binding = {_toml_str(e['binding'])}", f"command = {_toml_str(portable_command(e['command']))}", ""]
@@ -169,34 +170,34 @@ def apply_shortcuts(path=None, dry_run=False, prune=False):
         with open(path, "rb") as f:
             entries = tomllib.load(f).get("shortcut", [])
     except FileNotFoundError:
-        raise WinError(f"ショートカットの設定がありません: {path}（作るには win shortcuts export）")
+        raise WinError(tr("ショートカットの設定がありません: {0}（作るには win shortcuts export）").format(path))
     except tomllib.TOMLDecodeError as e:
-        raise WinError(f"ショートカットの設定を読めません: {path}: {e}")
+        raise WinError(tr("ショートカットの設定を読めません: {0}: {1}").format(path, e))
     have = {e["slug"]: e for e in kb_list()}
     changes, seen = [], set()
     for i, e in enumerate(entries, 1):
         slug = e.get("slug")
         if not slug or not e.get("binding") or not e.get("command"):
-            raise WinError(f"{i} 番目の項目に slug・binding・command が要ります: {e}")
+            raise WinError(tr("{0} 番目の項目に slug・binding・command が要ります: {1}").format(i, e))
         if slug in seen:
-            raise WinError(f"slug が重複しています: {slug}")
+            raise WinError(tr("slug が重複しています: {0}").format(slug))
         seen.add(slug)
         want = {"name": e.get("name") or slug, "binding": e["binding"], "command": resolved_command(e["command"])}
         cur = have.get(slug)
         if cur is None:
-            changes.append(f"追加: {slug}  {want['binding']}  {portable_command(want['command'])}")
+            changes.append(tr("追加: {0}  {1}  {2}").format(slug, want['binding'], portable_command(want['command'])))
         else:
             diff = [k for k in ("binding", "command", "name") if cur[k] != want[k]]
             if not diff:
                 continue
-            changes.append(f"更新: {slug}  " + "・".join(f"{k}: {cur[k]!r} → {want[k]!r}" if k != "command" else
+            changes.append(tr("更新: {0}  ").format(slug) + tr("・").join(f"{k}: {cur[k]!r} → {want[k]!r}" if k != "command" else
                                                          f"command: {portable_command(cur[k])!r} → {portable_command(want[k])!r}" for k in diff))
         if not dry_run:
             kb_set(slug, name=want["name"], command=want["command"], binding=want["binding"])
     if prune:
         for slug in have:
             if slug.startswith("win-") and slug not in seen:
-                changes.append(f"削除: {slug}")
+                changes.append(tr("削除: {0}").format(slug))
                 if not dry_run:
                     kb_remove(slug)
     return changes
@@ -222,8 +223,8 @@ def accel_norm(accel):
 
 
 # 日本語キーボードの特殊キー（キーシンボル名 → 画面での表記）。半角/全角は jp 配列で GRAVE（`）の位置にある
-JP_KEYS = {"Henkan": "変換", "Muhenkan": "無変換", "Zenkaku_Hankaku": "半角/全角",
-           "Hiragana_Katakana": "ひらがな/カタカナ"}
+JP_KEYS = {"Henkan": tr("変換"), "Muhenkan": tr("無変換"), "Zenkaku_Hankaku": tr("半角/全角"),
+           "Hiragana_Katakana": tr("ひらがな/カタカナ")}
 
 
 # 同じ物理キーを指す別名（日本語配列の半角/全角は `` ` `` と同じキー。GNOME の Above_Tab はこのキー）
@@ -249,7 +250,7 @@ def accel_id(accel):
 def accel_label(accel):
     """画面に出す表記（例: Super+Alt+M、変換、Super+半角/全角）。空なら「（未割り当て）」。"""
     if not accel:
-        return "（未割り当て）"
+        return tr("（未割り当て）")
     p = accel_parse(accel)
     if not p:
         return accel
@@ -293,10 +294,10 @@ def scan_accelerators():
             src = Gio.SettingsSchemaSource.new_from_directory(d, default, False)
         except GLib.Error:
             continue
-        scan_source(src, src.list_schemas(False)[0], "拡張 " + d.split("/")[-2].split("@")[0])
+        scan_source(src, src.list_schemas(False)[0], tr("拡張 ") + d.split("/")[-2].split("@")[0])
     for e in kb_list():
         if e["binding"]:
-            add(e["binding"], f"自作: {e['name'] or e['slug']}", e["slug"])
+            add(e["binding"], tr("自作: {0}").format((e['name'] or e['slug'])), e["slug"])
     return used
 
 
@@ -310,7 +311,7 @@ def accel_note(accel):
     Ctrl・Alt・Super のうち 2 つ以上と文字キーの組み合わせ（Shift なし）。"""
     p = accel_parse(accel)
     if not p:
-        return "キーの形式が読めません"
+        return tr("キーの形式が読めません")
     key, mods = p
     _, Gdk = _gtk()
     name = Gdk.keyval_name(key) or ""
@@ -319,5 +320,5 @@ def accel_note(accel):
     n = sum(1 for m in (Gdk.ModifierType.CONTROL_MASK, Gdk.ModifierType.ALT_MASK, Gdk.ModifierType.SUPER_MASK) if mods & m)
     if len(name) == 1 and name.isalnum() and n >= 2 and not mods & Gdk.ModifierType.SHIFT_MASK:
         return ""
-    return ("Mozc オンの端末などで届かないことがあります。確認済みで届く形は、Ctrl・Alt・Super のうち 2 つ以上と"
-            "文字キーの組み合わせ（Shift なし）です。")
+    return (tr("Mozc オンの端末などで届かないことがあります。確認済みで届く形は、Ctrl・Alt・Super のうち 2 つ以上と"
+            "文字キーの組み合わせ（Shift なし）です。"))

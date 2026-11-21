@@ -11,6 +11,7 @@ from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import CURRENT_FILE, GioUnix, TILEPICK_APP_ID, TILE_APP_ID, WinError
+from .i18n import tr
 from .screen import load_config
 from .shortcuts import WIN_BIN
 from .dbus import find_windows, focused, normal_windows, selector_for, usable_windows
@@ -69,7 +70,7 @@ def tile_candidates(text, windows, apps):
         rows = [{"act": {"act": "app", "id": a["id"]}, "title": a["name"], "sub": a["desc"], "icon": a["icon"]}
                 for _, _, a in scored[:60]]
         if q:
-            rows.append({"act": {"act": "cmd", "text": q}, "title": f"コマンドとして実行: {q}", "sub": "",
+            rows.append({"act": {"act": "cmd", "text": q}, "title": tr("コマンドとして実行: {0}").format(q), "sub": "",
                          "icon": "utilities-terminal-symbolic"})
         return "app", rows
     q = text.strip()
@@ -103,7 +104,7 @@ def launch_app(wc, app_id, timeout=12):
     """アプリを起動し、新しく現れた窓と起動コマンドを返す。"""
     info = (GioUnix.DesktopAppInfo if GioUnix else Gio.DesktopAppInfo).new(app_id)
     if info is None:
-        raise WinError(f"アプリが見つかりません: {app_id}")
+        raise WinError(tr("アプリが見つかりません: {0}").format(app_id))
     cmdline = app_commandline(info)
     return launch(wc, cmdline, timeout), cmdline
 
@@ -215,7 +216,7 @@ def run_tilepick():
             d, text = st["dlg"], self.entry.get_text()
             if d.get("launch") and text.startswith("!"):
                 _mode, rows = tile_candidates(text, [], st["apps"])
-                self.chip.set_text("アプリを新規起動")
+                self.chip.set_text(tr("アプリを新規起動"))
             else:
                 q, scored = text.strip(), []
                 for i, r in enumerate(d.get("rows") or []):
@@ -226,7 +227,7 @@ def run_tilepick():
                 rows = [{"act": {"act": "select", "index": i}, "title": r["title"], "sub": r.get("sub", ""),
                          **({"icon": r["icon"]} if r.get("icon") else {}),
                          **({"num": k + 1} if d.get("numbers") and k < 9 else {})} for k, (_, i, r) in enumerate(scored)]
-                self.chip.set_text(d.get("chip") or "選ぶ")
+                self.chip.set_text(d.get("chip") or tr("選ぶ"))
             st["rows"] = rows
             while (r := self.listbox.get_row_at_index(0)) is not None:
                 self.listbox.remove(r)
@@ -249,7 +250,7 @@ def run_tilepick():
                 self.listbox.append(row)
             if not rows:
                 self.listbox.append(Gtk.ListBoxRow(can_focus=False, selectable=False, child=Gtk.Label(
-                    label=d.get("empty") or "一致する項目がありません", margin_top=14, margin_bottom=14)))
+                    label=d.get("empty") or tr("一致する項目がありません"), margin_top=14, margin_bottom=14)))
             else:
                 keep = st["keep_selection"]
                 self.listbox.select_row(self.listbox.get_row_at_index(min(keep, len(rows) - 1) if keep is not None else 0))
@@ -475,8 +476,8 @@ def interactive(wc, args, expr, rects, area):
     labels = [""] * n
     procs = [] if args.no_preview else start_placeholders(wc, rects)
     wc.simple("Activate", me["id"])
-    print(f"型 {args.layout}（{expr}）: タイル {n} 枚")
-    print("入力: 窓の番号 / 検索語（既存の窓）/ !コマンド（新しく起動）/ p 一覧から選ぶ / 空行（空けておく）/ < 戻る / q 終了")
+    print(tr("型 {0}（{1}）: タイル {2} 枚").format(args.layout, expr, n))
+    print(tr("入力: 窓の番号 / 検索語（既存の窓）/ !コマンド（新しく起動）/ p 一覧から選ぶ / 空行（空けておく）/ < 戻る / q 終了"))
     i = 0
     try:
         while i < n:
@@ -485,7 +486,7 @@ def interactive(wc, args, expr, rects, area):
             taken = {a[0]["id"] for a in assigned if a}
             pool = [w for w in usable_windows(wc) if w["id"] not in taken]
             for k, w in enumerate(pool, 1):
-                mark = "（このターミナル）" if w["id"] == me["id"] else ""
+                mark = tr("（このターミナル）") if w["id"] == me["id"] else ""
                 print(f"  {k:>2}  {w.get('wm_class')}  「{(w.get('title') or '')[:40]}」{mark}")
             try:
                 line = ask_line(wc, pool, i, n, args.pick)
@@ -511,10 +512,10 @@ def interactive(wc, args, expr, rects, area):
                 else:
                     found = find_windows(wc, line, pool)
                     if not found:
-                        print(f"  見つかりません: {line}")
+                        print(tr("  見つかりません: {0}").format(line))
                         continue
                     if len(found) > 1:
-                        print(f"  {len(found)} 件に一致しました。番号で選んでください:")
+                        print(tr("  {0} 件に一致しました。番号で選んでください:").format(len(found)))
                         for w in found:
                             print(f"    {pool.index(w) + 1:>2}  {describe(w)}")
                         continue
@@ -529,7 +530,7 @@ def interactive(wc, args, expr, rects, area):
             labels[i] = (w.get("wm_class") or "")[:20]
             i += 1
     except KeyboardInterrupt:
-        print("\n中断しました（ここまでの配置は残ります）")
+        print(tr("\n中断しました（ここまでの配置は残ります）"))
     finally:
         stop_placeholders(procs)
         try:
@@ -539,7 +540,7 @@ def interactive(wc, args, expr, rects, area):
     toks = [shlex.quote(a[1]) if a else "-" for a in assigned]
     while toks and toks[-1] == "-":
         toks.pop()
-    print("\n同じ配置を再現するコマンド:")
+    print(tr("\n同じ配置を再現するコマンド:"))
     print("  win layout " + shlex.quote(args.layout) + (" " + " ".join(toks) if toks else ""))
     return 0
 

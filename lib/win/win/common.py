@@ -63,3 +63,7 @@ BUILTIN_LAYOUTS = {
 
 class WinError(Exception):
     pass
+
+
+class NameExistsError(WinError):
+    """同じ名前がすでにある（上書きの確認をする呼び出し側が、文言でなく型で見分けるため）。"""

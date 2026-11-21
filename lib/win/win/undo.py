@@ -10,6 +10,7 @@ import os
 import time
 
 from .common import WinError
+from .i18n import tr
 from .dbus import normal_windows
 from .placement import place_settled
 
@@ -83,7 +84,7 @@ def undo_last(wc):
     """直前の操作を戻す。(操作の名前, 戻した窓の数, 閉じていた窓の数) を返す。記録がなければ WinError。"""
     data = _read()
     if not data:
-        raise WinError("元に戻せる操作がありません")
+        raise WinError(tr("元に戻せる操作がありません"))
     ent = data.pop()
     _write(data)
     alive = {w["id"]: w for w in normal_windows(wc)}

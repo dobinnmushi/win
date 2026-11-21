@@ -10,6 +10,7 @@ import os
 import threading
 
 from .common import WinError
+from .i18n import tr
 from .dbus import focused, normal_windows
 from .placement import place_settled
 from .undo import begin
@@ -70,7 +71,7 @@ def group_of(wc, wid, data=None):
 def get_group(wc, name, data=None):
     data = load_groups(wc) if data is None else data
     if name not in data:
-        raise WinError(f"グループがありません: {name}（一覧は win group）")
+        raise WinError(tr("グループがありません: {0}（一覧は win group）").format(name))
     return data[name]
 
 
@@ -82,7 +83,7 @@ def resolve_name(wc, name=None, data=None):
         return name
     got = group_of(wc, focused(wc)["id"], data)
     if got is None:
-        raise WinError("前面の窓はグループに入っていません（グループの名前を指定してください）")
+        raise WinError(tr("前面の窓はグループに入っていません（グループの名前を指定してください）"))
     return got
 
 
@@ -105,7 +106,7 @@ def bring(wc, w, rect, workspace, activate=True):
     got = place_settled(wc, w["id"], tuple(rect))
     if activate:
         wc.simple("Activate", w["id"])
-    return f"希望の大きさにならず {got[2]}x{got[3]} です（最小サイズなど）" if got else ""
+    return tr("希望の大きさにならず {0}x{1} です（最小サイズなど）").format(got[2], got[3]) if got else ""
 
 
 def _desktop(wc):
@@ -127,7 +128,7 @@ def group_rect(wc, g):
             pass
     if g.get("rect"):
         return list(g["rect"])
-    raise WinError("グループの枠が分かりません（先にメンバーを置いてください）")
+    raise WinError(tr("グループの枠が分かりません（先にメンバーを置いてください）"))
 
 
 def _by_id(wc):
@@ -140,9 +141,9 @@ def create_group(wc, name, windows):
     """窓 windows でグループ name を作る（枠は最初の窓の枠）。すでにあれば WinError。メンバーは、ほかのグループから移る。"""
     data = load_groups(wc)
     if name in data:
-        raise WinError(f"グループはすでにあります: {name}（足すなら win group add）")
+        raise WinError(tr("グループはすでにあります: {0}（足すなら win group add）").format(name))
     if not windows:
-        raise WinError("窓がありません")
+        raise WinError(tr("窓がありません"))
     _leave(data, [w["id"] for w in windows])
     rect, _ = _frame(wc, windows[0]["id"])
     data[name] = {"members": [{"id": w["id"], "cls": w.get("wm_class") or ""} for w in windows], "rect": list(rect),
@@ -204,7 +205,7 @@ def activate_member(wc, name, wid):
     g = get_group(wc, name, data)
     w = _by_id(wc).get(wid)
     if w is None or all(m["id"] != wid for m in g["members"]):
-        raise WinError("その窓は、このグループのメンバーではありません")
+        raise WinError(tr("その窓は、このグループのメンバーではありません"))
     rect = group_rect(wc, g)
     note = bring(wc, w, rect, _desktop(wc))
     g["active"], g["rect"] = wid, list(rect)
@@ -218,7 +219,7 @@ def cycle_group(wc, name, d=1):
     g = get_group(wc, name, data)
     ids = [m["id"] for m in g["members"]]
     if len(ids) < 2:
-        raise WinError(f"グループ {name} のメンバーは 1 枚だけです")
+        raise WinError(tr("グループ {0} のメンバーは 1 枚だけです").format(name))
     k = (ids.index(g["active"]) + d) % len(ids) if g.get("active") in ids else 0
     activate_member(wc, name, ids[k])
     return _by_id(wc)[ids[k]], k + 1, len(ids)
@@ -279,7 +280,7 @@ def define_group(wc, name, windows):
     """窓 windows でグループ name を（作り直して）定義する。何度実行しても同じ結果になる。メンバーは、ほかのグループから移る。
     すでにあれば、枠と手前のメンバー（まだメンバーなら）を保つ。置きはしない（置くのは、layout の @group: や show）。"""
     if not windows:
-        raise WinError("窓がありません")
+        raise WinError(tr("窓がありません"))
     data = load_groups(wc)
     old = data.get(name)
     ids = [w["id"] for w in windows]
@@ -296,8 +297,8 @@ def group_from_stack(wc, n=0, name=None):
     """n 番目のタイル（0 は前面の窓のいるタイル）の重なり（層）を、グループにする。名前を省くと「タイル n」。作ったグループの名前を返す。"""
     st = find_stack(wc, n)
     if len(st["layers"]) < 2:
-        raise WinError(f"タイル {st['index']} に重なりはありません（窓は 1 枚）")
-    name = name or f"タイル{st['index']}"
+        raise WinError(tr("タイル {0} に重なりはありません（窓は 1 枚）").format(st['index']))
+    name = name or tr("タイル{0}").format(st['index'])
     create_group(wc, name, st["layers"])
     data = load_groups(wc)
     data[name]["active"] = st["top"]

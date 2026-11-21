@@ -16,6 +16,7 @@ from gi.repository import GLib
 from gi.repository import Gio
 
 from .common import HISTORY, NVPROMPT_APP_ID, PROMPT_APP_ID
+from .i18n import tr
 from .screen import load_config
 from .shortcuts import WIN_BIN
 from .dbus import AT_SELECTORS, WindowCalls, normal_windows, selector_for
@@ -24,14 +25,14 @@ from .pickwin import center_and_focus
 from .sets import set_summary
 
 
-SUBCOMMANDS = [("here", "選んだ窓を今の窓と同じ位置・大きさにして前面へ"), ("place", "選んだ窓を、置き先（番号のタイル・空き）に重ねる"), ("stack", "重なった窓の層を切り替える"), ("group", "窓のグループ"), ("stats", "使用の集計"), ("send", "窓を別のモニタへ送る"), ("shortcuts", "ショートカットの設定の書き出し・反映"), ("undo", "直前の操作を元に戻す"), ("desktop", "デスクトップを切り替える"), ("focus", "窓を前面に出す"), ("nav", "上下左右の窓へ"), ("layout", "窓を分割配置する"),
-               ("pick", "窓の一覧から選ぶ"), ("list", "窓の一覧を表示"), ("layouts", "型の一覧を表示"),
-               ("move", "窓を移動する"), ("size", "大きさを変える"), ("state", "最大化・最小化・常に手前"),
-               ("max", "窓を最大化する"), ("unmax", "最大化を戻す"), ("min", "窓を最小化する"),
-               ("unmin", "最小化を戻す"), ("close", "窓を閉じる"), ("run", "登録したコマンド・保存した並びを実行"),
-               ("save", "いまの窓の並びを名前をつけて保存"), ("set", "保存した並び（セット）を選んで適用"),
-               ("term", "端末を作業ディレクトリのタブつきで開く"), ("browse", "Firefox を URL のタブつきで開く"),
-               ("config", "設定の画面を開く"), ("help", "命令の書式と説明を表示")]
+SUBCOMMANDS = [("here", tr("選んだ窓を今の窓と同じ位置・大きさにして前面へ")), ("place", tr("選んだ窓を、置き先（番号のタイル・空き）に重ねる")), ("stack", tr("重なった窓の層を切り替える")), ("group", tr("窓のグループ")), ("stats", tr("使用の集計")), ("send", tr("窓を別のモニタへ送る")), ("shortcuts", tr("ショートカットの設定の書き出し・反映")), ("undo", tr("直前の操作を元に戻す")), ("desktop", tr("デスクトップを切り替える")), ("focus", tr("窓を前面に出す")), ("nav", tr("上下左右の窓へ")), ("layout", tr("窓を分割配置する")),
+               ("pick", tr("窓の一覧から選ぶ")), ("list", tr("窓の一覧を表示")), ("layouts", tr("型の一覧を表示")),
+               ("move", tr("窓を移動する")), ("size", tr("大きさを変える")), ("state", tr("最大化・最小化・常に手前")),
+               ("max", tr("窓を最大化する")), ("unmax", tr("最大化を戻す")), ("min", tr("窓を最小化する")),
+               ("unmin", tr("最小化を戻す")), ("close", tr("窓を閉じる")), ("run", tr("登録したコマンド・保存した並びを実行")),
+               ("save", tr("いまの窓の並びを名前をつけて保存")), ("set", tr("保存した並び（セット）を選んで適用")),
+               ("term", tr("端末を作業ディレクトリのタブつきで開く")), ("browse", tr("Firefox を URL のタブつきで開く")),
+               ("config", tr("設定の画面を開く")), ("help", tr("命令の書式と説明を表示"))]
 
 
 STATE_ACTIONS = ["max", "unmax", "min", "unmin", "above", "unabove"]
@@ -95,8 +96,8 @@ def suggest(text, spec):
                [(n + " ", e["summary"]) for n, e in ext.items() if n.startswith(cur)]
     prev = parts[-2]
     if first == "help" and len(parts) == 2:
-        topics = [("api", "拡張で使える関数の一覧"), ("commands", "登録したコマンドの一覧"), ("sets", "セットの一覧"),
-                  ("layouts", "型の一覧")]
+        topics = [("api", tr("拡張で使える関数の一覧")), ("commands", tr("登録したコマンドの一覧")), ("sets", tr("セットの一覧")),
+                  ("layouts", tr("型の一覧"))]
         return [(t + " ", d) for t, d in topics if t.startswith(cur)] + \
                [(c + " ", d) for c, d in SUBCOMMANDS if c.startswith(cur)] + \
                [(n + " ", e["summary"]) for n, e in ext.items() if n.startswith(cur)]
@@ -123,7 +124,7 @@ def suggest(text, spec):
         wants_window = kinds[k] if k < len(kinds) else ext[first]["rep"]
     if wants_window and cur.lower().startswith("@class:"):    # @class: の後は、いま開いている窓のクラス名
         classes = dict.fromkeys(w["cls"] for w in spec["windows"] if w["cls"])
-        return [(f"@class:{c} ", "【複数】このクラスの窓すべて") for c in classes if f"@class:{c}".lower().startswith(cur.lower())]
+        return [(f"@class:{c} ", tr("【複数】このクラスの窓すべて")) for c in classes if f"@class:{c}".lower().startswith(cur.lower())]
     if wants_window:
         low = cur.lower().lstrip("!")
         ats = [(s, d) for s, d in AT_SELECTORS if s.startswith(cur)] if cur.startswith("@") or not cur else []
@@ -158,7 +159,7 @@ def run_prompt():
             except ImportError:
                 GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: (self.quit(), False)[1])
             entry = Gtk.Entry(hexpand=True, text=spec.get("initial", ""),
-                              placeholder_text="例: layout quad / focus firefox / nav right")
+                              placeholder_text=tr("例: layout quad / focus firefox / nav right"))
             entry.set_position(-1)
             row = Gtk.Box(spacing=8, margin_top=10, margin_start=12, margin_end=12)
             prefix = Gtk.Label(label="win")
@@ -250,11 +251,11 @@ def run_prompt():
                                     selectable=True)
                     lab.add_css_class(css)
                     outer.append(lab)
-            hint = Gtk.Label(label="Tab 補完 ・ ↑↓ 候補 ・ Ctrl+↑↓ 履歴 ・ Enter 実行 ・ Esc 閉じる", margin_top=8)
+            hint = Gtk.Label(label=tr("Tab 補完 ・ ↑↓ 候補 ・ Ctrl+↑↓ 履歴 ・ Enter 実行 ・ Esc 閉じる"), margin_top=8)
             hint.add_css_class("dim-label")
             hint.add_css_class("caption")
             outer.append(hint)
-            header = Adw.HeaderBar(title_widget=Gtk.Label(label="窓の操作"), show_end_title_buttons=False)
+            header = Adw.HeaderBar(title_widget=Gtk.Label(label=tr("窓の操作")), show_end_title_buttons=False)
             view = Adw.ToolbarView(content=outer)
             view.add_top_bar(header)
             win = Adw.ApplicationWindow(application=self, title="win-prompt", default_width=640, content=view)
@@ -314,7 +315,7 @@ def cmd_prompt_gtk(args):
         try:
             argv = shlex.split(line)
         except ValueError as e:
-            spec.update(initial=line, error=f"引用符が閉じていません: {e}", info=None)
+            spec.update(initial=line, error=tr("引用符が閉じていません: {0}").format(e), info=None)
             continue
         if argv and argv[0] == "win":
             argv = argv[1:]
@@ -322,7 +323,7 @@ def cmd_prompt_gtk(args):
         if not argv:
             return 0
         if argv[0] == "prompt":
-            problem = "ここでは prompt は使えません"
+            problem = tr("ここでは prompt は使えません")
         if problem:
             spec.update(initial=line, error=problem, info=None)
             continue
@@ -339,11 +340,11 @@ def cmd_prompt_gtk(args):
                 spec["history"] = load_history()
                 continue
             return 0
-        msg = (se.strip() or so.strip() or f"失敗しました（終了コード {rc}）")
+        msg = (se.strip() or so.strip() or tr("失敗しました（終了コード {0}）").format(rc))
         spec.update(initial=line, error=msg, info=None)
 
 
-NVPROMPT_LUA = r'''-- win prompt（nvim の入力欄）。win が開くたびに書き出すファイルなので、編集しても上書きされます。
+NVPROMPT_LUA = tr(r'''-- win prompt（nvim の入力欄）。win が開くたびに書き出すファイルなので、編集しても上書きされます。
 local buf = vim.api.nvim_get_current_buf()
 vim.bo[buf].filetype = "win"
 vim.bo[buf].swapfile = false
@@ -474,7 +475,7 @@ vim.cmd("startinsert!")
 if vim.g.win_error and vim.g.win_error ~= "" then
   vim.schedule(function() vim.api.nvim_echo({ { vim.g.win_error, "ErrorMsg" } }, false, {}) end)
 end
-'''
+''')
 
 
 def nvim_prompt_available():
@@ -545,13 +546,13 @@ def prompt_execute(wc, line):
     try:
         argv = shlex.split(line)
     except ValueError as e:
-        return "error", f"引用符が閉じていません: {e}"
+        return "error", tr("引用符が閉じていません: {0}").format(e)
     if argv and argv[0] == "win":
         argv = argv[1:]
     if not argv:
         return "done", None
     if argv[0] == "prompt":
-        return "error", "ここでは prompt は使えません"
+        return "error", tr("ここでは prompt は使えません")
     time.sleep(0.25)            # 入力窓が閉じて、元の窓にフォーカスが戻るのを待つ
     rc, so, se = run_inline(argv)
     if rc == 0:
@@ -563,7 +564,7 @@ def prompt_execute(wc, line):
                                 f"{(w.get('title') or '')[:48]}" for w in reversed(normal_windows(wc)))
             return "show", so.rstrip()
         return "done", None
-    return "error", "\n".join(l.removeprefix("win: ") for l in (se.strip() or so.strip() or f"失敗しました（終了コード {rc}）").splitlines())
+    return "error", "\n".join(l.removeprefix("win: ") for l in (se.strip() or so.strip() or tr("失敗しました（終了コード {0}）").format(rc)).splitlines())
 
 
 def cmd_prompt(args):
@@ -573,7 +574,7 @@ def cmd_prompt(args):
     wc = WindowCalls()
     initial, notes, error = "", [], None
     load_extensions()
-    notes = [f"読み込めなかった拡張: {os.path.basename(f)}: {m}" for f, m in EXT_ERRORS]
+    notes = [tr("読み込めなかった拡張: {0}: {1}").format(os.path.basename(f), m) for f, m in EXT_ERRORS]
     while True:
         line = nvim_prompt_once(wc, initial, notes, error)
         if not line:
