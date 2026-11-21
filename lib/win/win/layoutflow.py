@@ -9,7 +9,7 @@ from .i18n import tr
 from .screen import default_screen, find_screen, load_config
 from .layouts import compute_rects, is_shorthand_layout, resolve_layout
 from .dbus import focused, normal_windows, selector_for, usable_windows
-from .placement import cmd_layout, place_settled, raise_group, spawn_watch
+from .placement import cmd_layout, place_settled, raise_group
 from .textui import start_placeholders, stop_placeholders
 from .sets import monitors_for_preview, next_monitor
 from .prompt import save_history
@@ -190,8 +190,6 @@ def tile_loop(wc, args, d, rects, area, mon):
             break
         show(i, notice)
     ent.commit()
-    # 起動した窓は、アプリ自身が遅れて大きさを戻すことがあるので、最終的に置かれたタイルの枠で、あとで見張る（やり直して外した窓は見張らない）
-    spawn_watch([(a[0]["id"], rects[k]) for k, a in enumerate(assigned) if a and a[1].startswith("!")])
     return assigned, auto_from, procs, me, n
 
 
