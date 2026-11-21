@@ -29,6 +29,30 @@ from .ext import EXT, EXT_DIR, EXT_ERRORS, EXT_TEMPLATE, _error_line, builtin_co
 CONFIG_APP_ID = "local.win.config"
 
 
+# 拡張のソースを開くエディタ。$VISUAL → $EDITOR → nvim の順（引数つきの指定も可。例: "nvim -p"）。
+# 窓で開く（端末を使わない）エディタ。これ以外は端末のエディタとして、Ptyxis の窓の中で開く。
+GUI_EDITORS = {"code", "codium", "gnome-text-editor", "gedit", "kate", "subl", "zed", "xed", "pluma", "mousepad"}
+LINE_PLUS_EDITORS = {"nvim", "vim", "vi", "view", "nano", "emacs", "micro"}       # 「+行 ファイル」で行へ飛べる
+
+
+def editor_argv(path, line):
+    """拡張のソース path を、line 行目で開くエディタの起動コマンドと、窓で開くエディタか（端末が要らないか）。"""
+    try:
+        cmd = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "")
+    except ValueError:
+        cmd = []
+    cmd = cmd or ["nvim"]
+    name = os.path.basename(cmd[0])
+    line = line or 1
+    if name in LINE_PLUS_EDITORS:
+        return cmd + [f"+{line}", path], False
+    if name in ("code", "codium"):
+        return cmd + ["-g", f"{path}:{line}"], True
+    if name == "hx":
+        return cmd + [f"{path}:{line}"], False
+    return cmd + [path], name in GUI_EDITORS               # 行へ飛ぶ書き方を知らないエディタは、ファイルだけ開く
+
+
 def read_layout_file():
     """layouts.toml の、自作の型・作業領域の余白・タイル間の隙間。"""
     try:
@@ -448,7 +472,7 @@ def run_config(page="shortcuts"):
                 row.add_suffix(self.suffix_box(
                     self.button(tr("実行"), lambda n=name: self.run_ext_command(n), tip=tr("引数を省いて、いま実行する")),
                     self.icon_button("document-edit-symbolic", lambda c=c: self.open_ext_source(c.file, c.line),
-                                     tr("定義を開く（端末の nvim）"))))
+                                     tr("定義を開く（エディタ）"))))
                 ge.add(row)
             for path, msg in EXT_ERRORS:
                 row = plain(Adw.ActionRow, title=tr("読み込めませんでした: {0}").format(os.path.basename(path)), subtitle=msg)
@@ -461,10 +485,10 @@ def run_config(page="shortcuts"):
             box.append(ge)
 
         def new_ext_form(self):
-            """名前を聞いて、ひな形の拡張を作り、端末の nvim で開く。"""
+            """名前を聞いて、ひな形の拡張を作り、エディタで開く。"""
             name_row = plain(Adw.EntryRow, title=tr("命令の名前（英字・数字・_。例: swap）"))
             group = Adw.PreferencesGroup(
-                description=tr("{0}/名前.py を作り、端末の nvim で開きます。保存した後、この画面の「再読み込み」で一覧に出ます。").format(EXT_DIR))
+                description=tr("{0}/名前.py を作り、エディタ（$VISUAL・$EDITOR。なければ端末の nvim）で開きます。保存した後、この画面の「再読み込み」で一覧に出ます。").format(EXT_DIR))
             group.add(name_row)
             msg = Gtk.Label(wrap=True, xalign=0)
             msg.add_css_class("error")
@@ -510,11 +534,17 @@ def run_config(page="shortcuts"):
         def open_ext_source(self, path, line):
             if not path:
                 return
-            if not (shutil.which("ptyxis") and shutil.which("nvim")):                  # 端末とエディタは、この 2 つだけに対応している
-                self.toast(tr("拡張のソースを開くには、ptyxis と nvim が要ります。ファイルは ") + path + tr(" にあります"))
+            argv, gui = editor_argv(path, line)
+            if not shutil.which(argv[0]):
+                self.toast(tr("拡張のソースを開くには、エディタ（{0}）が要ります。ファイルは ").format(argv[0]) + path + tr(" にあります"))
                 return
-            subprocess.Popen(["ptyxis", "--new-window", "-d", os.path.dirname(path), "--", "nvim", f"+{line or 1}", path],
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            if not gui:                                                              # 端末のエディタは、端末（Ptyxis）の窓の中で開く
+                if not shutil.which("ptyxis"):
+                    self.toast(tr("端末のエディタで開くには、ptyxis が要ります。ファイルは ") + path + tr(" にあります"))
+                    return
+                argv = ["ptyxis", "--new-window", "-d", os.path.dirname(path), "--"] + argv
+            subprocess.Popen(argv, cwd=os.path.dirname(path), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
 
         def run_ext_command(self, name):
             subprocess.Popen([sys.executable, WIN_BIN, name], stdin=subprocess.DEVNULL,

@@ -51,7 +51,7 @@ win undo                          # 直前の配置の前の状態に戻す
 - GNOME Shell と、拡張 **[Window Calls](https://extensions.gnome.org/extension/4724/window-calls/)**（入れて、有効にする。これが無いと win は動きません）。
 - Python 3.11 以上、PyGObject、GTK 4、libadwaita。Ubuntu なら `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`。
 - 任意: `win desktop` を使うなら、`extension/` の小さな Shell 拡張（`./install.sh --extension`。有効にして、一度ログインし直す）。
-- 任意: `firefox`・`ptyxis`・`nvim`（Firefox のタブや端末の作業ディレクトリの保存。設定画面から拡張のソースを開く操作は、`ptyxis` と `nvim` の両方が要ります）。
+- 任意: `firefox`・`ptyxis`・`nvim`（Firefox のタブや端末の作業ディレクトリの保存。設定画面から拡張のソースを開く操作は、`$VISUAL`・`$EDITOR`（なければ `nvim`）のエディタで開きます。端末のエディタは `ptyxis` の窓の中で、`code`・`gnome-text-editor` などの窓のエディタはそのまま開きます。ショートカットから起動した設定画面には、`~/.bashrc` にだけ書いた環境変数は届かないので、`~/.config/environment.d/` に書いてください）。
 
 ```sh
 git clone https://github.com/dobinnmushi/win.git

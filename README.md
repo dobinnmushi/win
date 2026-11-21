@@ -52,7 +52,7 @@ Requirements:
 - GNOME Shell with the extension **[Window Calls](https://extensions.gnome.org/extension/4724/window-calls/)** installed and enabled (win cannot work without it).
 - Python 3.11 or newer, PyGObject, GTK 4 and libadwaita. On Ubuntu: `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`.
 - Optional, for `win desktop`: the small Shell extension in `extension/` (`./install.sh --extension`, then enable it and log out and in once).
-- Optional: `firefox`, `ptyxis`, `nvim` for the features that use them (saving Firefox tabs and terminal directories; opening an extension's source from the settings window, which needs both `ptyxis` and `nvim`).
+- Optional: `firefox`, `ptyxis`, `nvim` for the features that use them (saving Firefox tabs and terminal directories; opening an extension's source from the settings window: it uses `$VISUAL` or `$EDITOR` (default `nvim`); a terminal editor is opened in `ptyxis`, while GUI editors such as `code` or `gnome-text-editor` are opened directly. Note that the settings window started from a shortcut does not see variables set only in `~/.bashrc`; put them in `~/.config/environment.d/` instead).
 
 ```sh
 git clone https://github.com/dobinnmushi/win.git

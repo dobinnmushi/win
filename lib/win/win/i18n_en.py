@@ -393,18 +393,20 @@ EN = {
         "(None yet. Create one with the button at the top right)",
     "{0} に .py を置き、関数に @command を付けると win の命令になります（win 名前 で呼べて、入力欄の補完・登録したコマンド・ショートカットでも使えます）。書き方は同じ場所の winapi.pyi と、win help にあります。":
         "Put a .py in {0} and add @command to a function to make it a win command (callable as win NAME, and usable from the input box completion, registered commands and shortcuts). See winapi.pyi in the same place, and win help, for how to write one.",
-    "定義を開く（端末の nvim）":
-        "Open the definition (nvim in a terminal)",
+    "定義を開く（エディタ）":
+        "Open the definition (in the editor)",
     "開く":
         "Open",
     "（拡張はまだありません）":
         "(No extensions yet)",
-    "{0}/名前.py を作り、端末の nvim で開きます。保存した後、この画面の「再読み込み」で一覧に出ます。":
-        "Creates {0}/NAME.py and opens it in nvim in a terminal. After saving, press \"Reload\" on this screen to list it.",
+    "{0}/名前.py を作り、エディタ（$VISUAL・$EDITOR。なければ端末の nvim）で開きます。保存した後、この画面の「再読み込み」で一覧に出ます。":
+        "Creates {0}/NAME.py and opens it in your editor ($VISUAL or $EDITOR; nvim in a terminal if neither is set). After saving, press \"Reload\" on this screen to list it.",
     "{0} を作りました。保存したら「再読み込み」を押してください":
         "Created {0}. Press \"Reload\" after saving",
-    "拡張のソースを開くには、ptyxis と nvim が要ります。ファイルは ":
-        "Opening an extension's source needs ptyxis and nvim. The file is at ",
+    "拡張のソースを開くには、エディタ（{0}）が要ります。ファイルは ":
+        "Opening an extension's source needs the editor ({0}). The file is at ",
+    "端末のエディタで開くには、ptyxis が要ります。ファイルは ":
+        "Opening in a terminal editor needs ptyxis. The file is at ",
     "窓の並びに名前をつけて保存したものです。`win set 名前`、または `win set`（絞り込みの小窓）で呼べます。保存先は {0} です。キーは「ショートカット」ページで付けます。":
         "A saved window arrangement under a name. Call it with `win set NAME`, or `win set` (a filter dialog). It is saved in {0}. Assign keys on the \"Shortcuts\" page.",
     "適用":
