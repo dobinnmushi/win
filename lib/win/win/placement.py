@@ -25,6 +25,15 @@ def place(wc, wid, rect):
     wc.move_resize(wid, *rect)
 
 
+def is_maximized(wc, wid):
+    """最大化・全画面か。（要求より大きい窓が最小サイズのせいか、最大化に戻されたのかを見分ける）"""
+    try:
+        d = wc.details(wid)
+    except WinError:
+        return False
+    return bool(d.get("maximized_horizontally") or d.get("maximized_vertically") or d.get("fullscreen"))
+
+
 def place_settled(wc, wid, rect, tries=8):
     """窓を rect に置き、起動直後にアプリ自身が動かして元に戻る場合に備えて、定着するまで繰り返す。
 
@@ -52,8 +61,8 @@ def place_settled(wc, wid, rect, tries=8):
             got = tuple(wc.rect(wid))
         if got == rect:
             return None
-        if got[:2] == rect[:2] and got[2] >= rect[2] and got[3] >= rect[3]:
-            return got
+        if got[:2] == rect[:2] and got[2] >= rect[2] and got[3] >= rect[3] and not is_maximized(wc, wid):
+            return got                           # 大きいのは最小サイズのせい（最大化に戻されたのなら、置き直す）
     return got
 
 
@@ -64,7 +73,7 @@ def watch_settled(wc, items, limit=WATCH_SECONDS):
     """置いた窓 items=[(窓の ID, 枠)] を limit 秒のあいだ見張り、アプリ自身に動かされたら置き直す（黙って行う）。
 
     起動直後のアプリは、前回の大きさの復元などで、置いたあとに遅れて大きさを変えることがある（遅れの長さは分からない）。
-    見張るのは起動した窓だけ。最小サイズで縮まらないだけの枠は、place_settled と同じく確定として扱う。
+    見張るのは起動した窓だけ。最小サイズで縮まらないだけの枠（最大化は除く）は、place_settled と同じく確定として扱う。
     """
     end = time.time() + limit
     tried = {wid: 0.0 for wid, r in items}                   # 最後に置き直した時刻（失敗しても、間をあけて試し続ける）
@@ -72,7 +81,7 @@ def watch_settled(wc, items, limit=WATCH_SECONDS):
         for wid, r in items:
             try:
                 cur = tuple(wc.rect(wid))
-                fine = cur == tuple(r) or (cur[:2] == tuple(r[:2]) and cur[2] >= r[2] and cur[3] >= r[3])
+                fine = cur == tuple(r) or (cur[:2] == tuple(r[:2]) and cur[2] >= r[2] and cur[3] >= r[3] and not is_maximized(wc, wid))
                 if not fine and time.time() - tried[wid] >= 0.5:
                     place_settled(wc, wid, r, tries=6)
                     tried[wid] = time.time()
