@@ -403,6 +403,16 @@ EN = {
         "Creates {0}/NAME.py and opens it in your editor ($VISUAL or $EDITOR; nvim in a terminal if neither is set). After saving, press \"Reload\" on this screen to list it.",
     "{0} を作りました。保存したら「再読み込み」を押してください":
         "Created {0}. Press \"Reload\" after saving",
+    "拡張を削除しますか？":
+        "Delete this extension?",
+    "「{0}」をゴミ箱へ移します。":
+        "\"{0}\" will be moved to the trash.",
+    "この中の命令（{0}）と、それに付けたキーが使えなくなります。":
+        " The commands in it ({0}) and the keys assigned to them will stop working.",
+    "削除できませんでした: {0}":
+        "Could not delete: {0}",
+    "ゴミ箱へ移しました":
+        "Moved to the trash",
     "拡張のソースを開くには、エディタ（{0}）が要ります。ファイルは ":
         "Opening an extension's source needs the editor ({0}). The file is at ",
     "端末のエディタで開くには、ptyxis が要ります。ファイルは ":

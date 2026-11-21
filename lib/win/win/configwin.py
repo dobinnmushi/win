@@ -472,13 +472,15 @@ def run_config(page="shortcuts"):
                 row.add_suffix(self.suffix_box(
                     self.button(tr("実行"), lambda n=name: self.run_ext_command(n), tip=tr("引数を省いて、いま実行する")),
                     self.icon_button("document-edit-symbolic", lambda c=c: self.open_ext_source(c.file, c.line),
-                                     tr("定義を開く（エディタ）"))))
+                                     tr("定義を開く（エディタ）")),
+                    self.icon_button("user-trash-symbolic", lambda c=c: self.confirm_delete_ext(c.file), tr("削除"))))
                 ge.add(row)
             for path, msg in EXT_ERRORS:
                 row = plain(Adw.ActionRow, title=tr("読み込めませんでした: {0}").format(os.path.basename(path)), subtitle=msg)
                 row.add_css_class("error")
-                row.add_suffix(self.suffix_box(self.icon_button("document-edit-symbolic",
-                                                                lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), tr("開く"))))
+                row.add_suffix(self.suffix_box(
+                    self.icon_button("document-edit-symbolic", lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), tr("開く")),
+                    self.icon_button("user-trash-symbolic", lambda p=path: self.confirm_delete_ext(p), tr("削除"))))
                 ge.add(row)
             if not EXT and not EXT_ERRORS:
                 ge.add(plain(Adw.ActionRow, title=tr("（拡張はまだありません）")))
@@ -545,6 +547,25 @@ def run_config(page="shortcuts"):
                 argv = ["ptyxis", "--new-window", "-d", os.path.dirname(path), "--"] + argv
             subprocess.Popen(argv, cwd=os.path.dirname(path), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
+
+        def confirm_delete_ext(self, path):
+            """拡張のファイルを、確かめてからゴミ箱へ移す。ファイルの中の命令（1 つとは限らない）のキーも消す。"""
+            names = [n for n, c in EXT.items() if c.file == path]
+            body = tr("「{0}」をゴミ箱へ移します。").format(os.path.basename(path))
+            if names:
+                body += tr("この中の命令（{0}）と、それに付けたキーが使えなくなります。").format("・".join(names))
+            self.confirm(tr("拡張を削除しますか？"), body, tr("削除"), lambda: self.delete_ext(path, names))
+
+        def delete_ext(self, path, names):
+            try:
+                Gio.File.new_for_path(path).trash(None)
+            except GLib.Error as e:
+                self.toast(tr("削除できませんでした: {0}").format(e.message))
+                return
+            for n in names:
+                kb_remove(ext_slug(n))
+            self.toast(tr("ゴミ箱へ移しました"))
+            self.refresh()
 
         def run_ext_command(self, name):
             subprocess.Popen([sys.executable, WIN_BIN, name], stdin=subprocess.DEVNULL,

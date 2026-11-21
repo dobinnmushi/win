@@ -168,15 +168,24 @@ def place_initial(targets, index, n):
     return tiles[n - 1]
 
 
-def place_apply(wc, front, targets, index, chosen, minimize=False):
-    """chosen を、置き先と同じ位置・大きさ（最大化なら最大化）にして前面に出す。通知する文を返す。"""
+def clip_to_area(rect, area):
+    """枠 rect を作業領域 area に切り詰める。重なりがなければ（別のモニタなど）そのまま返す。"""
+    x, y, w, h = rect
+    ax, ay, aw, ah = area
+    x0, y0, x1, y1 = max(x, ax), max(y, ay), min(x + w, ax + aw), min(y + h, ay + ah)
+    return (x0, y0, x1 - x0, y1 - y0) if x1 > x0 and y1 > y0 else rect
+
+
+def place_apply(wc, front, targets, index, chosen, minimize=False, screen=None):
+    """chosen を、置き先と同じ位置・大きさ（最大化なら最大化）にして前面に出す。通知する文を返す。
+    置き先の窓が作業領域からはみ出していても、はみ出した分は写さない（並びの逆算も作業領域で切り詰めて、半分などと判定している）。"""
     by_id = {w["id"]: w for w in normal_windows(wc)}
     t = targets[index]
     if t["id"] is None:                      # 空きスペース: その枠に置く
         dest, dmax, dws = t["abs"], False, front.get("workspace", 0)
     else:
         d = wc.details(t["id"])
-        dest = (d["x"], d["y"], d["width"], d["height"])
+        dest = clip_to_area((d["x"], d["y"], d["width"], d["height"]), (screen or default_screen()).work_area(load_config()))
         dmax = bool(d.get("maximized_horizontally") and d.get("maximized_vertically"))
         dws = (by_id.get(t["id"]) or front).get("workspace", 0)
     ent = begin(wc, "place")                  # 動かす窓の、動かす前の状態（win undo で戻す）
@@ -214,7 +223,7 @@ def cmd_place(args):
         if n == "free":                       # 置く窓がもともと空きに重なっていたら、その分を除いて空きを取り直す
             targets, _ = place_targets(wc, front, True, exclude=(w["id"],), screen=screen)
             index = place_initial(targets, fidx, "free")
-        notice = place_apply(wc, front, targets, index, w, args.min)
+        notice = place_apply(wc, front, targets, index, w, args.min, screen)
         if notice:
             print(notice, file=sys.stderr)
         return 0
@@ -437,7 +446,7 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
                 break
             elif ev.kind == "launched":
                 chosen = ev.window
-                notice = place_apply(wc, front, targets, index, chosen, minimize)   # 起動した窓は、アプリが決めた位置（別のモニタのことも）に
+                notice = place_apply(wc, front, targets, index, chosen, minimize, screen)   # 起動した窓は、アプリが決めた位置（別のモニタのことも）に
                 if notice:                                                          # 見え続けないよう、小窓を閉じる前にすぐ置く
                     print(notice, file=sys.stderr)
                 placed = True
@@ -449,7 +458,7 @@ def gui_place(wc, front, screen, targets, index, minimize=False):
     if not any(w["id"] == chosen["id"] for w in normal_windows(wc)):
         raise WinError(tr("その窓はもう閉じられました"))
     time.sleep(0.2)                          # 小窓が閉じて、フォーカスが戻るのを待ってから動かす
-    notice = place_apply(wc, front, targets, index, chosen, minimize)
+    notice = place_apply(wc, front, targets, index, chosen, minimize, screen)
     if notice:
         print(notice, file=sys.stderr)
     return 0
