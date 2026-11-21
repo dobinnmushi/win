@@ -19,11 +19,11 @@ The interface (dialogs, messages, `--help`) is available in **English and Japane
 (Japanese if it starts with `ja`, English otherwise); set `WIN_LANG=ja` or `WIN_LANG=en` to override.
 
 <p align="center">
-  <img src="docs/images/layout-dialog.png" alt="The layout picker: choose a layout, switch monitor with the arrow keys" width="48%">
-  <img src="docs/images/config-shortcuts.png" alt="The settings window, shortcuts page" width="48%">
+  <img src="docs/images/layout-dialog-en.png" alt="The layout picker: choose a layout, switch monitor with the arrow keys" width="48%">
+  <img src="docs/images/config-shortcuts-en.png" alt="The settings window, shortcuts page" width="48%">
 </p>
 
-*Left: `win layout` (pick a layout with the keyboard). Right: `win config`. The screenshots show the Japanese interface.*
+*Left: `win layout` (pick a layout with the keyboard). Right: `win config`.*
 
 ## Features
 

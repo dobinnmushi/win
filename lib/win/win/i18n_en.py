@@ -728,7 +728,7 @@ EN = {
     "{0}　{1}枚":
         "{0}  ×{1}",
     " ・ Enter 決定してタイルごとに選ぶ ・ Tab 決定して前面の窓で自動配置 ・ Esc 閉じる":
-        " · Enter confirm and choose per tile · Tab confirm and arrange with the frontmost windows · Esc close",
+        " · Enter choose per tile · Tab auto-arrange with the front windows · Esc close",
     "タイル {0} の窓は希望の大きさにならず {1}x{2} です（最小サイズなど）":
         "The window of tile {0} is not the requested size but {1}x{2} (minimum size etc.)",
     "その窓はもう閉じられました":
@@ -742,7 +742,7 @@ EN = {
     "タイル {0} / {1}　{2}":
         "Tile {0} / {1} {2}",
     " ・ ←→ 並べる先のモニタ":
-        " · ←→ monitor to arrange on",
+        " · ←→ monitor",
     "使えない文字があります":
         "Contains characters that cannot be used",
     "数か ( が必要です":
@@ -782,7 +782,7 @@ EN = {
     "当たる窓:\n":
         "Matching windows:\n",
     "↑↓ 選択 ・ ←→ 置き先を動かす（空きスペースにも） ・ Enter 決定（置き先と同じ位置・大きさで前面へ） ・ 先頭 ! でアプリ ・ Esc 閉じる":
-        "↑↓ select · ←→ move the destination (free space too) · Enter confirm (to the front at the destination's position and size) · leading ! for an app · Esc close",
+        "↑↓ select · ←→ move the destination (free space too) · Enter place there · ! launches an app · Esc close",
     "  （最小化）":
         "  (minimized)",
     "書式: win stack [next|prev|list] [タイルの番号]（番号は 0 なら前面の窓のいるタイル）":
