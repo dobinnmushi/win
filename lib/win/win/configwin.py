@@ -11,10 +11,12 @@ import threading
 import time
 import tomllib
 from gi.repository import GLib
+from gi.repository import GObject
 from gi.repository import Gio
 
 from .common import BUILTIN_LAYOUTS, CONFIG, DEFAULT_INSETS, NameExistsError, WinError
 from .i18n import tr
+from .keymap import ACTIONS, GROUPS, LABELS, display, keys_for, parse, tip_for
 from .screen import load_config
 from .layouts import compute_rects
 from .shortcuts import ACTION_GROUPS, G_CMD, G_MOVE, G_OTHER, G_SET, JP_KEYS, WIN_ACTIONS, WIN_BIN, accel_conflicts, accel_label, accel_norm, accel_note, accel_parse, command_slug, ext_slug, kb_list, kb_remove, kb_set, scan_accelerators, set_slug
@@ -97,12 +99,16 @@ def run_config(page="shortcuts"):
             css = Gtk.CssProvider()
             css.load_from_string(".tile-box { border: 1px solid alpha(currentColor, .4); border-radius: 4px; "
                                  "background: alpha(@accent_bg_color, .18); font-size: 9pt; } "
-                                 ".cand-list row:selected { background: alpha(@accent_bg_color, .3); }")
+                                 ".cand-list row:selected { background: alpha(@accent_bg_color, .3); } "
+                                 "row.kb-cursor { outline: 2px solid @accent_color; outline-offset: -2px; border-radius: 8px; }")
             Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
                                                       Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
             self.toasts = Adw.ToastOverlay()
             self.stack = Adw.ViewStack()
             self.pages = {}
+            self.rows = {}                               # ページ → [{"row", "default", "edit", "delete", "new"}]（キーで動かす行）
+            self.cursor = {}                             # ページ → 現在の行の添字（-1 は未選択）
+            self.page_new = {}                           # ページ → 行がないときの「新規作成」
             for key, title, icon in (("shortcuts", tr("ショートカット"), "input-keyboard-symbolic"),
                                      ("commands", tr("コマンド"), "utilities-terminal-symbolic"),
                                      ("sets", tr("セット"), "view-dual-symbolic"),
@@ -114,11 +120,187 @@ def run_config(page="shortcuts"):
                 self.pages[key] = box
                 self.stack.add_titled_with_icon(scroll, key, title, icon)
             header = Adw.HeaderBar(title_widget=Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE))
+            self.search_entry = Gtk.SearchEntry(hexpand=True, placeholder_text=tr("一覧を絞り込む"))
+            self.search_bar = Gtk.SearchBar(child=self.search_entry, search_mode_enabled=False)
+            self.search_bar.connect_entry(self.search_entry)
+            self.search_entry.connect("search-changed", lambda _e: self.apply_filter())
+            self.search_bar.connect("notify::search-mode-enabled", lambda *_a: self.apply_filter())
+            toggle = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text=self.keytip(tr("一覧を絞り込む"), "filter"))
+            toggle.bind_property("active", self.search_bar, "search-mode-enabled", GObject.BindingFlags.BIDIRECTIONAL)
+            header.pack_start(toggle)
+            help_btn = Gtk.Button(icon_name="input-keyboard-symbolic", tooltip_text=self.keytip(tr("キー一覧"), "help"))
+            help_btn.connect("clicked", lambda _b: self.show_key_help())
+            header.pack_end(help_btn)
             view = Adw.ToolbarView(content=self.stack)
             view.add_top_bar(header)
+            view.add_top_bar(self.search_bar)
             self.toasts.set_child(view)
             self.set_content(self.toasts)
+            ctrl = Gtk.EventControllerKey()
+            ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)      # 矢印などが、フォーカスの移動に使われる前に受ける。文字入力中は on_window_key が通す
+            ctrl.connect("key-pressed", self.on_window_key)
+            self.add_controller(ctrl)
+            self.stack.connect("notify::visible-child-name", lambda *_a: (self.apply_filter(), self.mark_cursor()))
             self.refresh()
+
+        # ------------------------------------------------------------ キー操作
+        def keytip(self, text, action):
+            """ツールチップに、動作のキーを添える（例: 「削除（Delete / d）」）。"""
+            return f"{text}（{tip_for(action)}）"
+
+        def reg(self, page, row, default=None, edit=None, delete=None, new=None):
+            """キーで動かす行として登録する（ページを作り直すたびに、そのページの分を空にしてから登録する）。"""
+            self.rows.setdefault(page, []).append({"row": row, "default": default, "edit": edit, "delete": delete, "new": new})
+
+        def page_name(self):
+            return self.stack.get_visible_child_name()
+
+        def shown_rows(self, page=None):
+            return [r for r in self.rows.get(page or self.page_name(), []) if r["row"].get_visible()]
+
+        def mark_cursor(self, scroll=True):
+            """現在の行に印を付け（他は外し）、見える所までスクロールする。"""
+            page = self.page_name()
+            for p, rs in self.rows.items():
+                for r in rs:
+                    r["row"].remove_css_class("kb-cursor")
+            rs = self.shown_rows(page)
+            i = self.cursor.get(page, -1)
+            if not 0 <= i < len(rs):
+                return
+            row = rs[i]["row"]
+            row.add_css_class("kb-cursor")
+            if scroll:
+                GLib.idle_add(self.scroll_to, row)
+
+        def scroll_to(self, row):
+            scroll = self.stack.get_visible_child()
+            adj = scroll.get_vadjustment() if scroll is not None else None
+            ok, rect = row.compute_bounds(scroll.get_child()) if adj is not None else (False, None)
+            if ok:
+                top, bottom = rect.get_y(), rect.get_y() + rect.get_height()
+                if top < adj.get_value():
+                    adj.set_value(max(0, top - 12))
+                elif bottom > adj.get_value() + adj.get_page_size():
+                    adj.set_value(bottom - adj.get_page_size() + 12)
+            return False
+
+        def move_cursor(self, to):
+            """to: 整数（相対）か "first"・"last"。表示中の行だけを巡る。"""
+            page = self.page_name()
+            n = len(self.shown_rows(page))
+            if not n:
+                return
+            i = self.cursor.get(page, -1)
+            if to == "first":
+                i = 0
+            elif to == "last":
+                i = n - 1
+            elif i < 0:                               # まだ選んでいないときの最初の ↓ は先頭へ、↑ は末尾へ
+                i = 0 if to > 0 else n - 1
+            else:
+                i = min(n - 1, max(0, i + to))
+            self.cursor[page] = i
+            self.set_focus(None)                      # 行の中のボタンにフォーカスが残ると、Enter がそのボタンに行く
+            self.mark_cursor()
+
+        def current_row(self):
+            rs = self.shown_rows()
+            i = self.cursor.get(self.page_name(), -1)
+            return rs[i] if 0 <= i < len(rs) else None
+
+        def run_row(self, kind):
+            r = self.current_row()
+            if r is None:
+                self.toast(tr("行を選んでください（↑↓ または j k）"))
+                return
+            if kind == "new":
+                cb = r["new"] or self.page_new.get(self.page_name())
+            else:
+                cb = r[kind]
+            if cb is None:
+                self.toast(tr("この行には、その操作がありません"))
+                return
+            cb()
+
+        def apply_filter(self):
+            """絞り込みの文字で、いまのページの行を隠す・出す（題名と説明に含まれる行だけ）。"""
+            text = self.search_entry.get_text().strip().lower() if self.search_bar.get_search_mode() else ""
+            for rs in self.rows.values():
+                for r in rs:
+                    row = r["row"]
+                    hay = f"{row.get_title()} {row.get_subtitle() or ''}".lower()
+                    row.set_visible(not text or text in hay)
+            page = self.page_name()
+            self.cursor[page] = min(self.cursor.get(page, -1), len(self.shown_rows(page)) - 1)
+            self.mark_cursor(scroll=False)
+
+        def do_action(self, action):
+            """動作名を実行する。実行したら True。"""
+            if action.startswith("page_") and action[5:].isdigit():
+                self.stack.set_visible_child_name(("shortcuts", "commands", "sets", "layouts")[int(action[5:]) - 1])
+            elif action in ("page_prev", "page_next"):
+                names = ("shortcuts", "commands", "sets", "layouts")
+                i = names.index(self.page_name()) + (1 if action == "page_next" else -1)
+                self.stack.set_visible_child_name(names[i % len(names)])
+            elif action in ("row_down", "row_up"):
+                self.move_cursor(1 if action == "row_down" else -1)
+            elif action in ("row_first", "row_last"):
+                self.move_cursor("first" if action == "row_first" else "last")
+            elif action in ("row_default", "row_edit", "row_delete", "new"):
+                self.run_row({"row_default": "default", "row_edit": "edit", "row_delete": "delete", "new": "new"}[action])
+            elif action == "filter":
+                self.search_bar.set_search_mode(True)
+                self.search_entry.grab_focus()
+            elif action == "help":
+                self.show_key_help()
+            elif action == "close":
+                self.close()
+            else:
+                return False
+            return True
+
+        def on_window_key(self, _ctrl, keyval, _keycode, state):
+            if self.get_visible_dialog() is not None:                 # ダイアログの間は、後ろの画面を動かさない
+                return False
+            focus = self.get_focus()
+            typing = isinstance(focus, (Gtk.Editable, Gtk.TextView))
+            if keyval == Gdk.KEY_Escape:
+                if self.search_bar.get_search_mode():
+                    self.search_bar.set_search_mode(False)
+                    self.apply_filter()
+                    return True
+                return False
+            mask = state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK)
+            held = {m for m, bit in (("Control", Gdk.ModifierType.CONTROL_MASK), ("Alt", Gdk.ModifierType.ALT_MASK),
+                                     ("Super", Gdk.ModifierType.SUPER_MASK)) if mask & bit}
+            for action in ACTIONS:
+                for accel in keys_for(action):
+                    name, mods = parse(accel)
+                    if Gdk.keyval_from_name(name) != keyval or mods != held:
+                        continue
+                    if typing and not mods:                           # 文字入力中は、Ctrl などのないキーは入力のもの
+                        continue
+                    if not mods and isinstance(focus, Gtk.Button) and keyval == Gdk.KEY_Return:
+                        continue                                      # フォーカスのあるボタンの Enter は、そのボタンのもの
+                    if typing and action in ("new", "close", "row_edit") and mods:
+                        continue                                      # 入力欄の Ctrl+E などは、入力欄の編集に任せる
+                    return self.do_action(action)
+            return False
+
+        def show_key_help(self):
+            """キー一覧（Adw.ShortcutsDialog）。いまの表から作る。"""
+            d = Adw.ShortcutsDialog()
+            for title, actions in GROUPS:
+                sec = Adw.ShortcutsSection(title=title)
+                for a in actions:
+                    ks = keys_for(a)                      # 先頭は標準のキー（キーの絵で）、残りは打つとおりの文字で（j と J を取り違えないため）
+                    item = Adw.ShortcutsItem.new(LABELS[a], ks[0])
+                    if len(ks) > 1:
+                        item.set_subtitle(tr("または: {0}").format("  ".join(display(k) for k in ks[1:])))
+                    sec.add(item)
+                d.add(sec)
+            d.present(self)
 
         # ------------------------------------------------------------ 共通
         def toast(self, text):
@@ -131,6 +313,7 @@ def run_config(page="shortcuts"):
             self.build_commands()
             self.build_sets()
             self.build_layouts()
+            self.apply_filter()                          # 作り直した行に、絞り込みと現在の行の印を付け直す
 
         def suffix_box(self, *widgets):
             box = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
@@ -138,17 +321,17 @@ def run_config(page="shortcuts"):
                 box.append(w)
             return box
 
-        def button(self, label, cb, css=None, tip=None):
+        def button(self, label, cb, css=None, tip=None, act=None):
             b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
             if css:
                 b.add_css_class(css)
-            if tip:
-                b.set_tooltip_text(tip)
+            if tip or act:
+                b.set_tooltip_text(self.keytip(tip or label, act) if act else tip)
             b.connect("clicked", lambda _b: cb())
             return b
 
-        def icon_button(self, icon, cb, tip):
-            b = Gtk.Button(icon_name=icon, valign=Gtk.Align.CENTER, tooltip_text=tip)
+        def icon_button(self, icon, cb, tip, act=None):
+            b = Gtk.Button(icon_name=icon, valign=Gtk.Align.CENTER, tooltip_text=self.keytip(tip, act) if act else tip)
             b.add_css_class("flat")
             b.connect("clicked", lambda _b: cb())
             return b
@@ -313,7 +496,7 @@ def run_config(page="shortcuts"):
             self.refresh()
 
         def shortcut_row(self, slug, title, subtitle, current, name, command, deletable=False,
-                         editable=False, kind=None):
+                         editable=False, kind=None, reg=True):
             row = plain(Adw.ActionRow, title=title, subtitle=subtitle)
             row.set_subtitle_lines(1)
             btns = [self.key_label(current),
@@ -334,11 +517,22 @@ def run_config(page="shortcuts"):
                 chip.add_css_class("dim-label")
                 row.add_prefix(chip)
             row.add_suffix(self.suffix_box(*btns))
+            if reg:                                       # キーで動かす: 既定＝キーの変更、編集＝名前とコマンド、削除＝自作は削除・それ以外はキーの解除
+                change = lambda: self.capture_key(title, current, slug, lambda a: self.set_binding(slug, name, command, a))
+                if deletable:
+                    delete = lambda: self.confirm(tr("このショートカットを削除しますか？"), tr("「{0}」を削除します。").format(title), tr("削除"),
+                                                  lambda: (kb_remove(slug), self.toast(tr("削除しました")), self.refresh()))
+                else:
+                    delete = (lambda: self.set_binding(slug, name, command, "")) if current else None
+                self.reg("shortcuts", row, default=change, edit=(lambda: self.shortcut_form(slug)) if editable else None,
+                         delete=delete, new=lambda: self.shortcut_form(None))
             return row
 
         def build_shortcuts(self):
             box = self.pages["shortcuts"]
             clear(box)
+            self.rows["shortcuts"] = []
+            self.page_new["shortcuts"] = lambda: self.shortcut_form(None)
             intro = Gtk.Label(wrap=True, xalign=0, label=(
                 tr("キーは、ここで一元管理します（GNOME の「カスタムショートカット」と同じ場所に書きます）。"
                 "変更はすぐ保存され、反映まで数秒かかることがあります。")))
@@ -350,7 +544,8 @@ def run_config(page="shortcuts"):
             for slug, label, args, group in WIN_ACTIONS:
                 e = kbs.get(slug)
                 row = self.shortcut_row(slug, label, f"win {args}", e["binding"] if e else "",
-                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", kind=tr("組み込み"))
+                                        f"win {args}（{label}）", f"{WIN_BIN} {args}", kind=tr("組み込み"),
+                                        reg=not slug.startswith("win-slot-"))          # 1〜9 は折りたたみの中なので、キーで巡る行には入れない
                 (slot_rows if slug.startswith("win-slot-") else rows[group]).append(row)
             if slot_rows:                                     # 1〜9 は 1 行にまとめ、開くと 9 個のキーを付けられる
                 bound = sum(1 for slug, *_ in WIN_ACTIONS if slug.startswith("win-slot-") and kbs.get(slug, {}).get("binding"))
@@ -437,6 +632,8 @@ def run_config(page="shortcuts"):
         def build_commands(self):
             box = self.pages["commands"]
             clear(box)
+            self.rows["commands"] = []
+            self.page_new["commands"] = lambda: self.command_form(None)
             intro = Gtk.Label(wrap=True, xalign=0, label=(
                 tr("よく使う操作に名前をつけて登録します。`win run 名前` で呼べて、入力欄（win prompt）の補完にも出ます。"
                 "窓の並びは「セット」ページで保存します。キーは「ショートカット」ページで付けます。")))
@@ -449,12 +646,14 @@ def run_config(page="shortcuts"):
             for name, c in cmds.items():
                 row = plain(Adw.ActionRow, title=name, subtitle=f"{kinds.get(c.get('type', 'win'), '?')}　{describe_command(c)}")
                 row.set_subtitle_lines(1)
+                delete = lambda n=name: self.confirm(tr("コマンドを削除しますか？"), tr("「{0}」と、それに付けたキーを削除します。").format(n),
+                                                     tr("削除"), lambda: self.delete_command(n))
                 row.add_suffix(self.suffix_box(
-                    self.button(tr("実行"), lambda n=name: self.run_command(n), tip=tr("いま実行する")),
-                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n), tr("編集")),
-                    self.icon_button("user-trash-symbolic", lambda n=name: self.confirm(
-                        tr("コマンドを削除しますか？"), tr("「{0}」と、それに付けたキーを削除します。").format(n), tr("削除"),
-                        lambda: self.delete_command(n)), tr("削除"))))
+                    self.button(tr("実行"), lambda n=name: self.run_command(n), tip=tr("いま実行する"), act="row_default"),
+                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n), tr("編集"), "row_edit"),
+                    self.icon_button("user-trash-symbolic", delete, tr("削除"), "row_delete")))
+                self.reg("commands", row, default=lambda n=name: self.run_command(n), edit=lambda n=name: self.command_form(n),
+                         delete=delete, new=lambda: self.command_form(None))
                 g.add(row)
             if not cmds:
                 g.add(plain(Adw.ActionRow, title=tr("（まだありません。右上のボタンから作れます）")))
@@ -472,15 +671,21 @@ def run_config(page="shortcuts"):
                 row.add_suffix(self.suffix_box(
                     self.button(tr("実行"), lambda n=name: self.run_ext_command(n), tip=tr("引数を省いて、いま実行する")),
                     self.icon_button("document-edit-symbolic", lambda c=c: self.open_ext_source(c.file, c.line),
-                                     tr("定義を開く（エディタ）")),
-                    self.icon_button("user-trash-symbolic", lambda c=c: self.confirm_delete_ext(c.file), tr("削除"))))
+                                     tr("定義を開く（エディタ）"), "row_edit"),
+                    self.icon_button("user-trash-symbolic", lambda c=c: self.confirm_delete_ext(c.file), tr("削除"), "row_delete")))
+                # 拡張の既定の操作は、実行ではなく定義を開く（引数なしで実行すると困る命令があるため）
+                self.reg("commands", row, default=lambda c=c: self.open_ext_source(c.file, c.line), edit=lambda c=c: self.open_ext_source(c.file, c.line),
+                         delete=lambda c=c: self.confirm_delete_ext(c.file), new=self.new_ext_form)
                 ge.add(row)
             for path, msg in EXT_ERRORS:
                 row = plain(Adw.ActionRow, title=tr("読み込めませんでした: {0}").format(os.path.basename(path)), subtitle=msg)
                 row.add_css_class("error")
                 row.add_suffix(self.suffix_box(
-                    self.icon_button("document-edit-symbolic", lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), tr("開く")),
-                    self.icon_button("user-trash-symbolic", lambda p=path: self.confirm_delete_ext(p), tr("削除"))))
+                    self.icon_button("document-edit-symbolic", lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), tr("開く"), "row_edit"),
+                    self.icon_button("user-trash-symbolic", lambda p=path: self.confirm_delete_ext(p), tr("削除"), "row_delete")))
+                self.reg("commands", row, default=lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)),
+                         edit=lambda p=path, m=msg: self.open_ext_source(p, _error_line(m)), delete=lambda p=path: self.confirm_delete_ext(p),
+                         new=self.new_ext_form)
                 ge.add(row)
             if not EXT and not EXT_ERRORS:
                 ge.add(plain(Adw.ActionRow, title=tr("（拡張はまだありません）")))
@@ -576,6 +781,8 @@ def run_config(page="shortcuts"):
         def build_sets(self):
             box = self.pages["sets"]
             clear(box)
+            self.rows["sets"] = []
+            self.page_new["sets"] = self.save_arrangement_form
             intro = Gtk.Label(wrap=True, xalign=0, label=(
                 tr("窓の並びに名前をつけて保存したものです。`win set 名前`、または `win set`（絞り込みの小窓）で呼べます。保存先は {0} です。キーは「ショートカット」ページで付けます。").format(SETS)))
             intro.add_css_class("dim-label")
@@ -588,12 +795,14 @@ def run_config(page="shortcuts"):
             for name, c in sets.items():
                 row = plain(Adw.ActionRow, title=name, subtitle=set_summary(c))
                 row.set_subtitle_lines(1)
+                delete = lambda n=name: self.confirm(tr("セットを削除しますか？"), tr("「{0}」と、それに付けたキーを削除します。").format(n),
+                                                     tr("削除"), lambda: self.delete_set(n))
                 row.add_suffix(self.suffix_box(
-                    self.button(tr("適用"), lambda n=name: self.run_set(n), tip=tr("いま適用する")),
-                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n, is_set=True), tr("編集")),
-                    self.icon_button("user-trash-symbolic", lambda n=name: self.confirm(
-                        tr("セットを削除しますか？"), tr("「{0}」と、それに付けたキーを削除します。").format(n), tr("削除"),
-                        lambda: self.delete_set(n)), tr("削除"))))
+                    self.button(tr("適用"), lambda n=name: self.run_set(n), tip=tr("いま適用する"), act="row_default"),
+                    self.icon_button("document-edit-symbolic", lambda n=name: self.command_form(n, is_set=True), tr("編集"), "row_edit"),
+                    self.icon_button("user-trash-symbolic", delete, tr("削除"), "row_delete")))
+                self.reg("sets", row, default=lambda n=name: self.run_set(n), edit=lambda n=name: self.command_form(n, is_set=True),
+                         delete=delete, new=self.save_arrangement_form)
                 g.add(row)
             if not sets:
                 g.add(plain(Adw.ActionRow, title=tr("（まだありません。右上の「今の窓の並びを保存…」から作れます）")))
