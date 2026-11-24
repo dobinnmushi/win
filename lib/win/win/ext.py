@@ -396,7 +396,7 @@ def api_group_of(w):
 
 
 def api_window_items(exclude=()):
-    """今のワークスペースで最小化されていない窓を、一覧の行にする（value は Window）。"""
+    """今のワークスペースの窓を、一覧の行にする（value は Window。最小化した窓は後ろに「（最小化）」付きで並ぶ）。"""
     return window_items(_wc(), exclude, wrap=Window)
 
 
@@ -816,7 +816,7 @@ class Dialog:
     def __exit__(self, *exc: object) -> bool: ...
 
 def window_items(exclude: list[Window] = []) -> list[Item]:
-    \"\"\"今のワークスペースで最小化されていない窓を、一覧の行にする（前面に近い順。value は Window）。exclude の窓は除く。\"\"\"
+    \"\"\"今のワークスペースの窓を、一覧の行にする（前面に近い順。最小化した窓は後ろに「（最小化）」付きで並ぶ。value は Window）。exclude の窓は除く。\"\"\"
 def choose(title: str, items: list[Item], *, preview: Callable[[Item], Map] | None = None, placeholder: str = "文字で絞り込み",
            hint: str = "", filter: bool = True) -> Item | None:
     \"\"\"一覧から 1 つ選ぶ。選んだ Item、Esc なら None。preview(item) -> Map を渡すと、選択が動くたびにミニ地図を出す。

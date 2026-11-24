@@ -14,7 +14,7 @@ from typing import Any
 
 from .common import TILEPICK_APP_ID, WinError
 from .i18n import tr
-from .dbus import WindowCalls, usable_windows
+from .dbus import WindowCalls, minimized_windows, usable_windows
 from .store import icon_for_class
 from .pickwin import center_and_focus
 from .placement import launch
@@ -283,11 +283,14 @@ class Dialog:
 # ---------------------------------------------------------------- 1 回で終わる関数
 
 def window_items(wc, exclude=(), wrap=None):
-    """今のワークスペースで最小化されていない窓を、一覧の行にする（前面に近い順）。value は窓（wrap を渡せば wrap した値）。"""
+    """今のワークスペースの窓を、一覧の行にする（前面に近い順。最小化した窓は、後ろに「（最小化）」付きで並べる）。
+    value は窓（wrap を渡せば wrap した値）。"""
     wrap = wrap or (lambda w: w)
     skip = {w if isinstance(w, int) else w["id"] if isinstance(w, dict) else w.id for w in exclude}
-    return [Item((w.get("title") or w.get("wm_class") or "")[:90], w.get("wm_class") or "", icon_for_class(w.get("wm_class")), wrap(w))
-            for w in usable_windows(wc) if w["id"] not in skip]
+    shown = [(w, False) for w in usable_windows(wc)] + [(w, True) for w in minimized_windows(wc)]
+    return [Item((w.get("title") or w.get("wm_class") or "")[:90] + (tr("  （最小化）") if mini else ""), w.get("wm_class") or "",
+                 icon_for_class(w.get("wm_class")), wrap(w))
+            for w, mini in shown if w["id"] not in skip]
 
 
 def choose(title, items, *, preview=None, placeholder=tr("文字で絞り込み"), hint=HINT, filter=True, screen=None):

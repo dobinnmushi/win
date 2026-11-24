@@ -64,6 +64,11 @@ def usable_windows(wc):
     return out
 
 
+def minimized_windows(wc):
+    """今のワークスペースにある、最小化されている窓（前面に近い順）。小窓の一覧で、選べるように後ろへ並べる。"""
+    return [w for w in reversed(normal_windows(wc)) if w.get("in_current_workspace") and wc.details(w["id"]).get("minimized")]
+
+
 def match(w, sel):
     if sel.isdigit() and len(sel) >= 5:
         return w["id"] == int(sel)
