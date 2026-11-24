@@ -6,7 +6,9 @@ events() で返ってくる出来事（選んだ・キーを押した・文字�
 
 import contextlib
 import dataclasses
+import fcntl
 import json
+import os
 import subprocess
 from typing import Any
 
@@ -19,6 +21,49 @@ from .placement import launch
 from .tilepick import launch_app, list_apps, spawn_tilepick
 
 HINT = tr("↑↓ 選択 ・ Enter 決定 ・ Esc 取り消す")
+
+
+_locks = []                                     # 取ったロックを、プロセスが終わるまで持っておく（閉じると解放される）
+
+
+def single_instance(name):
+    """同じ名前の対話が、すでに別のプロセスで動いていなければ、その印（ロック）を取って True を返す。
+    動いていれば、その小窓を前面に出して False を返す（ロックはプロセスの終了で自動的に解放される）。"""
+    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), f"win-{name}.lock")
+    f = open(path, "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.seek(0)
+        owner = f.read().strip()
+        f.close()
+        _raise_dialog_of(int(owner) if owner.isdigit() else None)
+        return False
+    f.seek(0)
+    f.truncate()
+    f.write(str(os.getpid()))
+    f.flush()
+    _locks.append(f)
+    return True
+
+
+def _raise_dialog_of(owner_pid):
+    """プロセス owner_pid が開いている小窓（その子プロセスの窓）を前面に出す。見つからなければ何もしない。"""
+    if owner_pid is None:
+        return
+    wc = WindowCalls()
+    for w in wc.list():
+        if w.get("wm_class") != TILEPICK_APP_ID:
+            continue
+        try:
+            with open(f"/proc/{w.get('pid')}/stat", encoding="utf-8") as fh:
+                ppid = int(fh.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        if ppid == owner_pid:
+            with contextlib.suppress(WinError):
+                wc.simple("Activate", w["id"])
+            return
 
 
 @dataclasses.dataclass

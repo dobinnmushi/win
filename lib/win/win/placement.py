@@ -192,17 +192,22 @@ def expand_multi(wc, sels, n):
 def cmd_layout(args):
     from .layoutflow import gui_interactive, gui_layout_flow        # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
     from .tilepick import interactive
+    from .dialog import single_instance
     wc = WindowCalls()
     cfg = load_config()
     gap = cfg["gap"] if args.gap is None else args.gap
     screen = find_screen(args.monitor) if getattr(args, "monitor", None) else default_screen()
     area = screen.work_area(cfg)
     if args.layout is None:
+        if not single_instance("layout"):                 # 小窓がすでに開いている: 重ねて開かず、その小窓を前面に出す
+            return 0
         return gui_layout_flow(wc, args, cfg, area, gap)
     expr = resolve_layout(cfg, args.layout)
     rects = compute_rects(expr, area, gap)
     n = len(rects)
     if args.interactive:
+        if not args.text and not single_instance("layout"):
+            return 0
         return (interactive if args.text else gui_interactive)(wc, args, expr, rects, area)
 
     plan = [None] * n
