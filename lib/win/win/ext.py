@@ -510,8 +510,13 @@ class ExtCommand:
         return " ".join([f"win {self.name}"] + bits)
 
     def call(self, tokens):
+        from . import dialog
         args, kwargs = self.bind(tokens)
-        return self.fn(*args, **kwargs)
+        prev, dialog.CURRENT_EXT = dialog.CURRENT_EXT, self.name        # 小窓の二重起動の見張りに使う
+        try:
+            return self.fn(*args, **kwargs)
+        finally:
+            dialog.CURRENT_EXT = prev
 
     def bind(self, tokens):
         """入力の語を、関数の引数に変換して割り当てる。"""

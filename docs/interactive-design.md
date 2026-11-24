@@ -95,3 +95,11 @@ with ui.dialog(title="置き先を選ぶ", hint="←→ で置き先を動かす
 **確認（実機）**: `place`・`here`（左右・モニタ越え・`!calculator`）、`set`（地図・左右・適用）、`pick --id`（j/k・数字・q）、`layout`（型の選択・式 `1,2`・左右・`lr` → Ctrl+S → `!calculator`・再現コマンド・Tab の 2 経路）、`layout lr -i`（Ctrl+S・Ctrl+B）、拡張の `choose`・`confirm`・`ask`・`pick_tile`・`Dialog`・`pick()`。
 
 **未確認**: `keep_selection`、端末版の対話で `--preview`（番号の目印の窓）を付けた場合。端末版の対話の一覧（`line_from_picker`）は、疑似端末で `layout lr -i -t` を動かして確認した（`p`・`--pick`・窓の番号の選択・空ける・戻る・取消）。`layout` の Tab（型の選択画面での自動配置と、タイルごとの選択での「決めて残りを自動」）は、実機で確認した（試験前に全窓の位置を記録し、枠の基準の `place_settled` で復元）。
+
+## 8. 小窓の二重起動の防止（2026-11-24）
+
+小窓は同じクラス名で同時に複数開きうる。次の 2 つで、取り違えと重なりを防ぐ。
+- `center_and_focus` は、小窓を子プロセスの pid で選ぶ（クラス名だけで選ぶと、2 枚目が 1 枚目の窓を前面に出し続け、キーが 1 枚目に届いて 2 枚目が残った）。
+- 同じ命令の小窓が別のプロセスで開いていれば、新しい方は開かず、開いている小窓を前面に出す（`dialog.acquire`。`$XDG_RUNTIME_DIR/win-<名前>.lock` の flock で、プロセスが終わると自動で解放される）。
+  - 組み込み: `layout`・`place`（`here` と共有）・`pick`・`set` は、プロセスが終わるまで持つ（`single_instance`）。端末版の対話は対象外。
+  - 拡張: 実行中の拡張の命令名（`ext-命令名`）で、`Dialog` を開いているあいだだけ持つ。`choose`・`confirm`・`ask`・`pick_tile`・`pick_window`・`pick()` も同じ。同じプロセスの入れ子と連続は許す。重なった側は取り消しとして返る（`choose` は None、`confirm` は False、`pick()` は WinError、`Dialog.events()` は最初が `cancel`）。別の命令どうしは防がない。

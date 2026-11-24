@@ -23,14 +23,18 @@ from .tilepick import launch_app, list_apps, spawn_tilepick
 HINT = tr("↑↓ 選択 ・ Enter 決定 ・ Esc 取り消す")
 
 
-_locks = []                                     # 取ったロックを、プロセスが終わるまで持っておく（閉じると解放される）
+_held = {}                                      # 取っているロック: 名前 -> [ファイル, 入れ子の数]（同じプロセスの入れ子は許す）
+CURRENT_EXT = None                              # 実行中の拡張の命令名（ExtCommand.call が入れる）。拡張の小窓の見張りの名前になる
 
 
-def single_instance(name):
-    """同じ名前の対話が、すでに別のプロセスで動いていなければ、その印（ロック）を取って True を返す。
-    動いていれば、その小窓を前面に出して False を返す（ロックはプロセスの終了で自動的に解放される）。"""
-    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), f"win-{name}.lock")
-    f = open(path, "a+")
+def acquire(name):
+    """同じ名前の対話が、別のプロセスで動いていなければ、その印（ロック）を取って True を返す。
+    動いていれば、その小窓を前面に出して False を返す。同じプロセスがすでに持っていれば、入れ子として True。"""
+    if name in _held:
+        _held[name][1] += 1
+        return True
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
+    f = open(os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), f"win-{safe}.lock"), "a+")
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -43,8 +47,24 @@ def single_instance(name):
     f.truncate()
     f.write(str(os.getpid()))
     f.flush()
-    _locks.append(f)
+    _held[name] = [f, 1]
     return True
+
+
+def release(name):
+    """acquire で取ったロックを 1 つ手放す（最後の 1 つなら、ほかのプロセスが取れるようになる）。"""
+    held = _held.get(name)
+    if held is None:
+        return
+    held[1] -= 1
+    if held[1] <= 0:
+        del _held[name]
+        held[0].close()
+
+
+def single_instance(name):
+    """プロセスが終わるまで持つ見張り（取れなければ、動いている小窓を前面に出して False）。ロックはプロセスの終了で自動的に解放される。"""
+    return acquire(name)
 
 
 def _raise_dialog_of(owner_pid):
@@ -112,13 +132,14 @@ class Dialog:
     def __init__(self, title="", *, hint=HINT, placeholder=tr("文字で絞り込み"), filter=True, entry=True, ask=False, show_list=True,
                  launch=False, highlight=False, keys=(), keep_selection=False, empty="", chip="", window_title="win",
                  vim=False, numbers=False, watch=False,
-                 screen=None, wrap=None):
+                 screen=None, wrap=None, single=None):
         self.title, self.hint, self.placeholder, self.window_title = title, hint, placeholder, window_title
         self.opts = {"filter": filter, "entry": entry, "ask": ask, "list": show_list, "launch": launch, "highlight": highlight,
                      "keep_selection": keep_selection, "empty": empty, "chip": chip, "vim": vim, "numbers": numbers, "watch": watch}
         self._keys, self._rows, self._map, self._notice, self._text = list(keys), [], None, "", None
         self._screen, self._wrap = screen, wrap or (lambda w: w)
         self._child = self._wc = self._wid = None
+        self._single, self._lock, self._dup = single, None, False
         self._apps_sent = False
         self._rows_dirty = True
 
@@ -158,16 +179,25 @@ class Dialog:
     # -- 開閉
     def __enter__(self):
         self._wc = WindowCalls()
+        name = self._single or (f"ext-{CURRENT_EXT}" if CURRENT_EXT else None)    # 拡張の命令の中なら、その命令で同じ小窓を重ねて開かない
+        if name and not acquire(name):
+            self._dup = True                       # 同じ小窓がすでに開いている: 開かず、events() は取り消しだけを返す
+            return self
+        self._lock = name
         self._child = spawn_tilepick(self._screen)
         return self
 
     def __exit__(self, *exc):
+        if self._dup:
+            return False
         with contextlib.suppress(OSError, ValueError):
             self._send({"cmd": "quit"})
         try:
             self._child.wait(3)
         except subprocess.TimeoutExpired:
             self._child.kill()
+        if self._lock:
+            release(self._lock)
         return False
 
     def _send(self, msg):
@@ -205,6 +235,9 @@ class Dialog:
     # -- 出来事
     def events(self):
         """小窓を開いて、出来事を 1 つずつ返す。出来事を受け取ったあと、次の出来事を待つ前に、現在の内容を小窓へ渡し直す。"""
+        if self._dup:
+            yield Event("cancel")
+            return
         self._send(self._state("show"))
         if self._wid is None:                                # 2 回目以降の events() では、窓の位置を動かさない
             self._wid = center_and_focus(self._wc, self._child, TILEPICK_APP_ID)
