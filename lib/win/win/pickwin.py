@@ -17,11 +17,12 @@ def row_title(w, d=None):
 
 def center_and_focus(wc, proc, app_id, timeout=8):
     """子プロセスの窓が出たら、作業領域の中央付近に動かして前面にする（Wayland では窓自身が位置を決められない）。
-    出た直後に動かすと、GNOME が新しい窓を自分で置き直すことがあるので、狙った位置に来たのを確かめるまで動かし直す。"""
+    出た直後に動かすと、GNOME が新しい窓を自分で置き直すことがあるので、狙った位置に来たのを確かめるまで動かし直す。
+    小窓は同じクラス名で同時に複数開きうる（win layout の押し直しなど）ので、窓は子プロセスの pid で選ぶ。"""
     deadline = time.time() + timeout
     ax, ay, aw, ah = work_area(load_config())
     while time.time() < deadline and proc.poll() is None:
-        wid = next((w["id"] for w in wc.list() if w.get("wm_class") == app_id), None)
+        wid = next((w["id"] for w in wc.list() if w.get("wm_class") == app_id and w.get("pid") == proc.pid), None)
         if wid:
             settle = time.time() + 0.6
             while True:
