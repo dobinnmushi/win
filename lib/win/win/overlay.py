@@ -227,6 +227,9 @@ def cmd_place(args):
         if notice:
             print(notice, file=sys.stderr)
         return 0
+    from .dialog import single_instance           # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    if not single_instance("place"):               # place・here の小窓がすでに開いている: 重ねて開かず、その小窓を前面に出す
+        return 0
     return gui_place(wc, front, screen, targets, index, args.min)
 
 
@@ -470,6 +473,9 @@ def cmd_config(args):
 
 
 def cmd_pick(args):
+    from .dialog import single_instance           # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+    if not single_instance("pick"):                # 小窓がすでに開いている: 重ねて開かず、その小窓を前面に出す
+        return 1
     wc = WindowCalls()
     pool = list(reversed(normal_windows(wc)))
     if not pool:

@@ -120,6 +120,9 @@ def cmd_set(args):
         if not sets:
             raise WinError(tr("セットがありません（win save 名前 で、いまの窓の並びを保存できます）"))
         from .pickers import pick_set          # 逆向きの依存: 循環インポートを避けて、使うときに読み込む
+        from .dialog import single_instance
+        if not single_instance("set"):                    # 小窓がすでに開いている: 重ねて開かず、その小窓を前面に出す
+            return 1
         name, monitor = pick_set(wc, load_config(), sets)
         if name is None:
             return 1
