@@ -105,7 +105,7 @@ python3 tests/i18n_check.py               # every tr("…") string has an Englis
 ```
 
 Interface strings are written in Japanese inside `tr("…")`; the English translations are in `lib/win/win/i18n_en.py`
-(add an entry there when you add a string). Design notes are in `docs/` (in Japanese). Personal settings (shortcuts, key layers, usage notes) are intentionally not part of this
+(add an entry there when you add a string). Design notes are in `docs/en/` (translated from the Japanese originals in `docs/`). Personal settings (shortcuts, key layers, usage notes) are intentionally not part of this
 repository.
 
 ## License
