@@ -42,14 +42,23 @@ SHOW_OUTPUT = {"list", "layouts", "help"}   # 結果を入力欄の下に出す�
 
 
 def run_with_ascii_input(run):
-    """run() の間だけ、IBus を Mozc を通さない配列だけのエンジンにして、終わったら戻す（英字がかな・全角にならないように。
-    mozc-off でも Mozc の中が全角・かなのことがあった）。切り替え（ibus の起動 2 回、約 0.08 秒）は窓を作るのと同時に進める。"""
+    """run() の間だけ、日本語入力（IBus Mozc／fcitx5 Mozc）を Mozc を通さない状態にして、終わったら戻す（英字がかな・全角にならないように。
+    mozc-off でも Mozc の中が全角・かなのことがあった）。切り替え（約 0.08 秒）は窓を作るのと同時に進める。"""
+    if _im_backend() == "fcitx5":
+        # fcitx5 は状態をアプリごとに持つ。元のアプリには触らず、この窓（自分のプログラム）だけを切る（復元は要らない）。
+        me = _own_program()
+        th = threading.Thread(target=lambda: _run_quiet(_im_cmd(), "off-for", me), daemon=True)
+        th.start()
+        try:
+            return run()
+        finally:
+            th.join()
     state = {"prev": ""}
 
     def switch():
-        state["prev"] = ibus_engine()
-        if state["prev"].startswith("mozc"):
-            ibus_engine("xkb:jp::jpn")
+        state["prev"] = ime_state()
+        if ime_is_mozc(state["prev"]):
+            ime_plain()
 
     th = threading.Thread(target=switch, daemon=True)
     th.start()
@@ -57,12 +66,80 @@ def run_with_ascii_input(run):
         return run()
     finally:
         th.join()
-        if state["prev"].startswith("mozc"):
-            ibus_engine(state["prev"])
+        if ime_is_mozc(state["prev"]):
+            ime_set(state["prev"])
+
+
+def _im_backend():
+    im = _im_cmd()
+    return _run_quiet(im, "backend") if im else "ibus"
+
+
+def _own_program():
+    """このプロセスのプログラム名（fcitx5 が program: として見る名前）。"""
+    try:
+        with open("/proc/self/comm", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _im_cmd():
+    """共通コマンド im（IBus と fcitx5 を自動で見分ける）の場所。無ければ空文字（IBus を直接呼ぶ）。"""
+    return shutil.which("im") or ""
+
+
+def _run_quiet(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return ""
+
+
+def ime_state():
+    """日本語入力の今の状態（あとで ime_set に渡せる文字列）。IBus はエンジン名、fcitx5 は fcitx5:on@アプリ名／fcitx5:off@アプリ名。無ければ空文字。"""
+    im = _im_cmd()
+    return _run_quiet(im, "state") if im else _run_quiet("ibus", "engine")
+
+
+def ime_is_mozc(state):
+    """Mozc を通して入力する状態か（元に戻す必要があるか）。"""
+    return state.startswith("mozc") or state.startswith("fcitx5:on")
+
+
+def ime_is_on(state):
+    """Mozc が「あ」（変換する側）か。mozc-off と fcitx5:off は違う。"""
+    return (state.startswith("mozc") and state != "mozc-off") or state.startswith("fcitx5:on")
+
+
+def ime_set(state):
+    im = _im_cmd()
+    if im:
+        _run_quiet(im, "set", state)
+    elif state:
+        _run_quiet("ibus", "engine", state)
+
+
+def ime_plain():
+    """配列そのまま（Mozc を通さない）にする。"""
+    im = _im_cmd()
+    if im:
+        _run_quiet(im, "plain")
+    else:
+        _run_quiet("ibus", "engine", "xkb:jp::jpn")
+
+
+def ime_off():
+    """日本語入力を切る（IBus は mozc-off）。"""
+    im = _im_cmd()
+    if im:
+        _run_quiet(im, "off")
+    else:
+        _run_quiet("ibus", "engine", "mozc-off")
 
 
 def ibus_engine(name=None):
-    """IBus の入力エンジン名を返す。name があれば先に切り替える。ibus が無ければ空文字。"""
+    """IBus の入力エンジン名を返す。name があれば先に切り替える。ibus が無ければ空文字（互換のために残す）。"""
     try:
         if name:
             subprocess.run(["ibus", "engine", name], capture_output=True)

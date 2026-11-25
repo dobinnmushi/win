@@ -23,7 +23,7 @@ from .shortcuts import ACTION_GROUPS, G_CMD, G_MOVE, G_OTHER, G_SET, JP_KEYS, WI
 from .dbus import WindowCalls, normal_windows, selector_for
 from .store import SETS, check_win_line, describe_command, load_commands, load_sets, save_commands, save_sets, signature_markup, win_lines, write_toml
 from .sets import set_summary
-from .prompt import ibus_engine, suggest
+from .prompt import ime_is_on, ime_off, ime_set, ime_state, suggest
 from .appstate import save_arrangement
 from .ext import EXT, EXT_DIR, EXT_ERRORS, EXT_TEMPLATE, _error_line, builtin_commands, ext_spec, reload_extensions, write_ext_support
 
@@ -484,16 +484,16 @@ def run_config(page="shortcuts"):
             # ダイアログを開いている間、窓のフォーカスは空になり、内側の部品にはキーが届かない。窓全体で受け取る
             self.add_controller(ctrl)
             # 手入力の欄に英字（Super など）を打つので、開いている間だけ Mozc を直接入力にする
-            prev = ibus_engine()
-            switched = prev.startswith("mozc") and prev != "mozc-off"
+            prev = ime_state()
+            switched = ime_is_on(prev)
             if switched:
-                ibus_engine("mozc-off")
+                ime_off()
 
             def on_closed(_d):
                 self.remove_controller(ctrl)
                 self.get_native().get_surface().restore_system_shortcuts()
                 if switched:
-                    ibus_engine(prev)
+                    ime_set(prev)
 
             dlg.connect("closed", on_closed)
             update(current or "")
