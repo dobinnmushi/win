@@ -2,8 +2,6 @@
 
 [English](en/design.md)
 
-公開・個人設定との切り分けの検討は `docs/publishing.md`。
-
 GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道具。本体は Python のパッケージ（`lib/win/win/`）、起動役は `bin/win`。
 
 ## 1. 全体の構成
@@ -12,8 +10,9 @@ GNOME（Wayland）の窓を、コマンドと小窓で操作する自作の道�
 bin/win                 起動役（実体の位置から lib/win を探して import し、main() を呼ぶだけ）
 lib/win/win/            本体（27 のモジュール）
 tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・helper_test.py（拡張の D-Bus の約束の試験）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
-docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）・publishing.md（公開と個人設定の切り分けの検討）・images/（README の画像）
+docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）・images/（README の画像）
 presets/                標準のショートカットの一式（super-alt.toml。`win shortcuts apply` で反映）
+examples/               拡張（`~/.config/win/ext/` に置く Python）の見本: swap・merge・split
 README.md / README.ja.md・install.sh / uninstall.sh・LICENSE
 extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と、その導入の install.sh
 ~/.config/win/          利用者の設定（すべて任意）: shortcuts.toml・commands.toml・sets.toml・apps.toml・layouts.toml・ext/（拡張の Python）。リンクでもよい
@@ -124,9 +123,7 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 - **List の `workspace` の癖**: 副モニタの窓（全デスクトップに出ている）は、`workspace` が「いまのデスクトップ」に追従する。`win desktop list` で、副モニタの窓は、いまいるデスクトップに数えられる。
 - 方針: 動的ワークスペースでは、末尾に空のデスクトップが 1 つあるので、`count` はそれを含む。切り替えは端で一巡しない。
 
-## 4.4 使い方の想定・頻度・ショートカット
-
-個人の使い方の想定とキー表は、本体ではなく個人設定（`win-config` の `docs/usage.md`）に置く。
+## 4.4 アプリごとの設定
 
 - **アプリごとの設定（`apps.toml`）**: 起動のとき、引数なしだと新しい窓が出ないアプリに足す引数を、`~/.config/win/apps.toml`（`WIN_APPS` で差し替え可）の `[app.起動コマンド名]` の `new_window = ["--new-window"]` で指定できる。組み込みの既定（ptyxis・gnome-text-editor・nautilus・Chrome）より優先し、空のリストなら足さない。Firefox のタブや端末の作業ディレクトリの保存は、アプリごとの専用コード（`appstate.py`）で、表にはしない。
 

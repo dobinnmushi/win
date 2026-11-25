@@ -2,8 +2,6 @@
 
 [日本語](../design.md) · English translation of the Japanese original; if the two differ, the Japanese is authoritative. References to `docs/*.md` below mean the Japanese originals; the English translations are in `docs/en/`.
 
-The discussion of separating the public part from personal settings is in `docs/publishing.md`.
-
 A home-made tool that controls GNOME (Wayland) windows with commands and small dialogs. The core is a Python package (`lib/win/win/`), and the launcher is `bin/win`.
 
 ## 1. Overall structure
@@ -12,8 +10,9 @@ A home-made tool that controls GNOME (Wayland) windows with commands and small d
 bin/win                 launcher (finds lib/win from its own real location, imports it and just calls main())
 lib/win/win/            the core (27 modules)
 tests/                  snapshot.py (before/after comparison of output), names.py (undefined and unused names), trace.py (records window movement), helper_test.py (tests the extension's D-Bus contract), resetter.py (a test window that resets its own size right after being placed), fixtures/
-docs/                   design.md (this document), interactive-design.md (interactive dialogs), publishing.md (separating the public part from personal settings), images/ (the README's images)
+docs/                   design.md (this document), interactive-design.md (interactive dialogs), images/ (the README's images)
 presets/                the standard set of shortcuts (super-alt.toml; applied with `win shortcuts apply`)
+examples/               sample extensions (Python files for `~/.config/win/ext/`): swap, merge, split
 README.md / README.ja.md, install.sh / uninstall.sh, LICENSE
 extension/              the GNOME Shell extension win-helper@local (D-Bus for getting and switching desktops) and its install.sh
 ~/.config/win/          the user's settings (all optional): shortcuts.toml, commands.toml, sets.toml, apps.toml, layouts.toml, ext/ (Python extensions). They may be links
@@ -124,9 +123,7 @@ A named, saved collection of windows (`groups.py`; saved in `~/.local/state/win/
 - **A quirk of the `workspace` in List:** a window on the secondary monitor (shown on every desktop) has a `workspace` that follows "the current desktop". In `win desktop list`, windows on the secondary monitor are counted in the desktop you are on.
 - Policy: with dynamic workspaces there is always one empty desktop at the end, and `count` includes it. Switching does not wrap around at the ends.
 
-## 4.4 Assumed usage, frequency and shortcuts
-
-The assumed personal usage and the key table are placed not in the core but in the personal settings (`docs/usage.md` of `win-config`).
+## 4.4 Per-application settings
 
 - **Per-application settings (`apps.toml`):** the arguments to add when launching an application that opens no new window without arguments can be specified with `new_window = ["--new-window"]` under `[app.LAUNCH-COMMAND-NAME]` in `~/.config/win/apps.toml` (replaceable with `WIN_APPS`). It takes precedence over the built-in defaults (ptyxis, gnome-text-editor, nautilus, Chrome), and an empty list means nothing is added. Saving Firefox tabs and a terminal's working directory is done by dedicated per-application code (`appstate.py`), not a table.
 
