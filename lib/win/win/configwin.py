@@ -29,6 +29,7 @@ from .ext import EXT, EXT_DIR, EXT_ERRORS, EXT_TEMPLATE, _error_line, builtin_co
 
 
 CONFIG_APP_ID = "local.win.config"
+PAGE_NAMES = ("shortcuts", "commands", "sets", "layouts")      # 設定の窓のページ（キー 1〜4 の順）
 
 
 # 拡張のソースを開くエディタ。$VISUAL → $EDITOR → nvim の順（引数つきの指定も可。例: "nvim -p"）。
@@ -155,6 +156,20 @@ def run_config(page="shortcuts"):
         def page_name(self):
             return self.stack.get_visible_child_name()
 
+        def order_rows(self):
+            """キーで巡る行を、画面に見える上からの順に並べ直す（登録した順は、グループ分けの前の順で、見た目と食い違うため）。"""
+            for page, rs in self.rows.items():
+                order, stack = {}, [self.pages[page]]
+                while stack:                                     # 画面の部品の木を、上から順にたどる（深さ優先）
+                    w = stack.pop()
+                    order[id(w)] = len(order)
+                    kids, c = [], w.get_first_child()
+                    while c is not None:
+                        kids.append(c)
+                        c = c.get_next_sibling()
+                    stack.extend(reversed(kids))
+                rs.sort(key=lambda r: order.get(id(r["row"]), len(order)))
+
         def shown_rows(self, page=None):
             return [r for r in self.rows.get(page or self.page_name(), []) if r["row"].get_visible()]
 
@@ -238,9 +253,9 @@ def run_config(page="shortcuts"):
         def do_action(self, action):
             """動作名を実行する。実行したら True。"""
             if action.startswith("page_") and action[5:].isdigit():
-                self.stack.set_visible_child_name(("shortcuts", "commands", "sets", "layouts")[int(action[5:]) - 1])
+                self.stack.set_visible_child_name(PAGE_NAMES[int(action[5:]) - 1])
             elif action in ("page_prev", "page_next"):
-                names = ("shortcuts", "commands", "sets", "layouts")
+                names = PAGE_NAMES
                 i = names.index(self.page_name()) + (1 if action == "page_next" else -1)
                 self.stack.set_visible_child_name(names[i % len(names)])
             elif action in ("row_down", "row_up"):
@@ -313,6 +328,7 @@ def run_config(page="shortcuts"):
             self.build_commands()
             self.build_sets()
             self.build_layouts()
+            self.order_rows()
             self.apply_filter()                          # 作り直した行に、絞り込みと現在の行の印を付け直す
 
         def suffix_box(self, *widgets):

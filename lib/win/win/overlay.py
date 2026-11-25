@@ -513,6 +513,8 @@ def cmd_state(args):
               "above": "MakeAbove", "unabove": "UnmakeAbove"}[args.action]
     for w in targets(wc, args.window):
         wc.simple(method, w["id"])
+        if args.action == "max":                        # 最大化した窓が、ほかの窓の後ろに隠れたままにならないよう、前面に出す
+            wc.simple("Activate", w["id"])
     return 0
 
 

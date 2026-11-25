@@ -131,6 +131,9 @@ def suggest(text, spec):
         return [(shlex.quote(w["sel"]) + " ", f"{w['cls']} — {w['title']}") for w in spec["windows"]
                 if not cur.startswith("@") and (not low or low in (w["cls"] + " " + w["title"]).lower())] + \
                [(s if s.endswith(":") else s + " ", d) for s, d in ats]
+    if not cur and first in SIGNATURES:               # 空白の後に何も打っていないときも、使える指定（-w など）を出す（すでに打ったものは除く）
+        return [(p[1] + " ", p[3] if p[0] == "opt" else p[2]) for p in SIGNATURES[first][0]
+                if p[0] in ("opt", "flag") and p[1] not in parts]
     return []
 
 
@@ -179,7 +182,7 @@ def run_prompt():
             def refresh(*_):
                 while (r := sugg.get_row_at_index(0)) is not None:
                     sugg.remove(r)
-                shown[:] = suggest(entry.get_text(), spec)[:8]
+                shown[:] = suggest(entry.get_text(), spec)
                 markup = signature_markup(entry.get_text())     # 打っている命令の書式（いま打っている引数は太字）
                 sig.set_markup(markup or "")
                 sig.set_visible(bool(markup))
@@ -195,11 +198,26 @@ def run_prompt():
                     sugg.append(r)
                 if shown:
                     sugg.select_row(sugg.get_row_at_index(0))
+                sugg_box.get_vadjustment().set_value(0)
+
+            def show_selected():
+                """選んでいる候補が、欄の中で見えるようにスクロールする（ListBox は、選んだ行までは動かしてくれない）。"""
+                sel = sugg.get_selected_row()
+                adj = sugg_box.get_vadjustment()
+                ok, rect = sel.compute_bounds(sugg) if sel is not None else (False, None)
+                if ok:
+                    top, bottom = rect.get_y(), rect.get_y() + rect.get_height()
+                    if top < adj.get_value():
+                        adj.set_value(top)
+                    elif bottom > adj.get_value() + adj.get_page_size():
+                        adj.set_value(bottom - adj.get_page_size())
+                return False
 
             def move(d):
                 if shown:
                     sel = sugg.get_selected_row()
                     sugg.select_row(sugg.get_row_at_index(((sel.get_index() if sel else 0) + d) % len(shown)))
+                    GLib.idle_add(show_selected)
 
             def complete():
                 sel = sugg.get_selected_row()
@@ -327,6 +345,7 @@ def cmd_prompt_gtk(args):
         if problem:
             spec.update(initial=line, error=problem, info=None)
             continue
+        argv, line = bare_window_to_pick(argv, line)
         time.sleep(0.25)            # 入力窓が閉じて、元の窓にフォーカスが戻るのを待つ
         rc, so, se = run_inline(argv)
         if rc == 0:
@@ -541,6 +560,13 @@ def run_nvprompt(text_path, result_path, lua_path, error):
     run_with_ascii_input(lambda: app.run([]))
 
 
+def bare_window_to_pick(argv, line):
+    """-w で窓を指定せずに Enter を押したときは、窓の選択画面で選ぶ（@pick と同じ）。(argv, 履歴に残す行) を返す。"""
+    if argv and argv[-1] in ("-w", "--window"):
+        return argv + ["@pick"], line.rstrip() + " @pick"
+    return argv, line
+
+
 def prompt_execute(wc, line):
     """入力欄で打った 1 行を実行する。("done", None)・("show", 出力)・("error", 説明) のどれかを返す。"""
     try:
@@ -553,6 +579,7 @@ def prompt_execute(wc, line):
         return "done", None
     if argv[0] == "prompt":
         return "error", tr("ここでは prompt は使えません")
+    argv, line = bare_window_to_pick(argv, line)
     time.sleep(0.25)            # 入力窓が閉じて、元の窓にフォーカスが戻るのを待つ
     rc, so, se = run_inline(argv)
     if rc == 0:
