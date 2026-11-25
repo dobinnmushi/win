@@ -12,7 +12,6 @@ lib/win/win/            本体（27 のモジュール）
 tests/                  snapshot.py（出力の前後比較）・names.py（未定義・未使用の名前）・trace.py（窓の動きの記録）・helper_test.py（拡張の D-Bus の約束の試験）・resetter.py（置いた直後に大きさを戻す試験用の窓）・fixtures/
 docs/                   design.md（この文書）・interactive-design.md（対話型の小窓）・images/（README の画像）
 presets/                標準のショートカットの一式（super-alt.toml。`win shortcuts apply` で反映）
-examples/               拡張（`~/.config/win/ext/` に置く Python）の見本: swap・merge・split
 README.md / README.ja.md・install.sh / uninstall.sh・LICENSE
 extension/              GNOME Shell 拡張 win-helper@local（デスクトップの取得・切り替えの D-Bus）と、その導入の install.sh
 ~/.config/win/          利用者の設定（すべて任意）: shortcuts.toml・commands.toml・sets.toml・apps.toml・layouts.toml・ext/（拡張の Python）。リンクでもよい

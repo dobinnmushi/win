@@ -12,7 +12,6 @@ lib/win/win/            the core (27 modules)
 tests/                  snapshot.py (before/after comparison of output), names.py (undefined and unused names), trace.py (records window movement), helper_test.py (tests the extension's D-Bus contract), resetter.py (a test window that resets its own size right after being placed), fixtures/
 docs/                   design.md (this document), interactive-design.md (interactive dialogs), images/ (the README's images)
 presets/                the standard set of shortcuts (super-alt.toml; applied with `win shortcuts apply`)
-examples/               sample extensions (Python files for `~/.config/win/ext/`): swap, merge, split
 README.md / README.ja.md, install.sh / uninstall.sh, LICENSE
 extension/              the GNOME Shell extension win-helper@local (D-Bus for getting and switching desktops) and its install.sh
 ~/.config/win/          the user's settings (all optional): shortcuts.toml, commands.toml, sets.toml, apps.toml, layouts.toml, ext/ (Python extensions). They may be links

@@ -41,7 +41,7 @@ The interface (dialogs, messages, `--help`) is available in **English and Japane
 | `config` | A settings window for shortcuts, commands, layouts and sets. |
 | `shortcuts` | Keep your GNOME custom shortcuts in a TOML file: `export`, `apply [--dry-run] [--prune]`. |
 | `stats` | Local usage counts (see [Privacy](#privacy)). |
-| Extensions | Write your own commands in Python (`~/.config/win/ext/`), with an API and editor completion. Samples are in `examples/`. |
+| Extensions | Write your own commands in Python (`~/.config/win/ext/`), with an API and editor completion. |
 
 Run `win -h` and `win COMMAND -h` for details.
 

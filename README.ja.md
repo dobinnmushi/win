@@ -40,7 +40,7 @@ win undo                          # 直前の配置の前の状態に戻す
 | `config` | ショートカット・コマンド・型・セットの設定の窓。 |
 | `shortcuts` | GNOME のカスタムショートカットを TOML で管理: `export`、`apply [--dry-run] [--prune]`。 |
 | `stats` | 使用回数の集計（[プライバシー](#プライバシー)）。 |
-| 拡張 | 自分のコマンドを Python で書けます（`~/.config/win/ext/`）。API とエディタの補完つき。見本は `examples/` にあります。 |
+| 拡張 | 自分のコマンドを Python で書けます（`~/.config/win/ext/`）。API とエディタの補完つき。 |
 
 詳細は `win -h`・`win コマンド -h` を見てください。
 
