@@ -191,7 +191,10 @@ def run_config(page="shortcuts"):
         def scroll_to(self, row):
             scroll = self.stack.get_visible_child()
             adj = scroll.get_vadjustment() if scroll is not None else None
-            ok, rect = row.compute_bounds(scroll.get_child()) if adj is not None else (False, None)
+            child = scroll.get_child() if scroll is not None else None
+            if isinstance(child, Gtk.Viewport):                       # 自動で挟まれる Viewport の座標は、見えている範囲が基準でずれるので、中身全体（その子）を基準にする
+                child = child.get_child()
+            ok, rect = row.compute_bounds(child) if adj is not None and child is not None else (False, None)
             if ok:
                 top, bottom = rect.get_y(), rect.get_y() + rect.get_height()
                 if top < adj.get_value():
