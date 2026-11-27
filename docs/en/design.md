@@ -123,6 +123,14 @@ A named, saved collection of windows (`groups.py`; saved in `~/.local/state/win/
 - **A quirk of the `workspace` in List:** a window on the secondary monitor (shown on every desktop) has a `workspace` that follows "the current desktop". In `win desktop list`, windows on the secondary monitor are counted in the desktop you are on.
 - Policy: with dynamic workspaces there is always one empty desktop at the end, and `count` includes it. Switching does not wrap around at the ends.
 
+## 4.3 Focus-change cue (border flash)
+
+When a command settles the foreground on one window, that window's frame flashes briefly so you can see where focus went.
+- **Applies to**: `nav`, `focus`, `pick` (without `--id`), `stack`, `group next/prev/show/select`. Commands that move many windows (`layout`, `set`, `place`) do not flash. `focus` by name flashes too (a window that comes from another workspace or from behind is easy to lose). The decision is `cli.moves_focus`, called once at the end of a command rather than at each `Activate`.
+- **How**: the helper extension's D-Bus `Flash(color, width, duration)` reads the focused window 40 ms later (to let focus settle), overlays a border-only `St.Widget` on its frame and fades it out. Windows are not touched. With an old or missing extension nothing flashes and everything else works as before.
+- **Setting**: `[flash]` in `layouts.toml` (`enabled = true`, `color = "#62a0ea"`, `width = 2`, `duration = 450`). `enabled = false` turns it off.
+- **Verified**: the D-Bus call and its values in `tests/helper_test.py` (mock St). The actual drawing can only be checked after the extension is loaded (re-login).
+
 ## 4.4 Per-application settings
 
 - **Per-application settings (`apps.toml`):** the arguments to add when launching an application that opens no new window without arguments can be specified with `new_window = ["--new-window"]` under `[app.LAUNCH-COMMAND-NAME]` in `~/.config/win/apps.toml` (replaceable with `WIN_APPS`). It takes precedence over the built-in defaults (ptyxis, gnome-text-editor, nautilus, Chrome), and an empty list means nothing is added. Saving Firefox tabs and a terminal's working directory is done by dedicated per-application code (`appstate.py`), not a table.

@@ -6,7 +6,8 @@ import sys
 
 from .common import WinError
 from .i18n import tr
-from .screen import resolve_monitor
+from .desktop import flash_focus
+from .screen import load_config, resolve_monitor
 from .store import MONITOR_HELP
 from .placement import cmd_layout
 from .simple import cmd_focus, cmd_layouts, cmd_list, cmd_desktop, cmd_stats, cmd_send, cmd_undo, cmd_shortcuts
@@ -52,9 +53,25 @@ def main(argv=None):
     try:
         if args.cmd in ("layout", "here", "place", "stack", "group", "pick", "prompt", "save", "run", "set"):
             resolve_monitor(getattr(args, "monitor", None))      # 基準のモニタを、最初に 1 回決める
-        return args.fn(args)
+        code = args.fn(args)
+        if code == 0 and moves_focus(args):
+            flash_focus(load_config())
+        return code
     except WinError as e:
         return report_error(e)
+
+
+def moves_focus(args):
+    """この命令が、利用者の指示で前面の窓を 1 枚に決めたか（決めたなら、終わりに枠を光らせる。layout・set など窓を何枚も動かす命令は含めない）。"""
+    if args.cmd in ("nav", "focus"):
+        return True
+    if args.cmd == "pick":
+        return not args.id
+    if args.cmd == "stack":
+        return True                                               # list も、選んだ窓を前面に出す（選ばずに閉じたときは戻り値が 0 でないので光らない）
+    if args.cmd == "group":
+        return args.action in ("next", "prev", "show", "select")
+    return False
 
 
 def report_error(e):

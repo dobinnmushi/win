@@ -40,12 +40,18 @@ except win.WinError as e:
 src = open(EXT, encoding="utf-8").read()
 src, n = re.subn(r"import \{Extension\} from 'resource:[^']*';", "const Extension = class {};", src)
 assert n == 1, "extension.js の import の形が変わった"
+for pat, repl in ((r"import Clutter from 'gi://Clutter';", "const Clutter = globalThis.mockShell.Clutter;"),
+                  (r"import St from 'gi://St';", "const St = globalThis.mockShell.St;"),
+                  (r"import \* as Main from 'resource:[^']*';", "const Main = globalThis.mockShell.Main;")):
+    src, n = re.subn(pat, repl, src)
+    assert n == 1, "extension.js の import の形が変わった: " + pat
 src, n = re.subn(r"Gio\.DBus\.session, 'org\.local\.WinHelper',", f"Gio.DBus.session, '{MOCK_NAME}',", src)
 assert n == 1, "extension.js の D-Bus の名前の形が変わった"
 tmp = tempfile.mkdtemp(prefix="win-helper-")
 copy = os.path.join(tmp, "extension.js")
 open(copy, "w", encoding="utf-8").write(src)
-env = dict(os.environ, HELPER_COPY=copy, HELPER_SECONDS="25")
+flash_log = os.path.join(tmp, "flash.log")
+env = dict(os.environ, HELPER_COPY=copy, HELPER_SECONDS="25", HELPER_FLASH_LOG=flash_log)
 p = subprocess.Popen(["gjs", "-m", os.path.join(ROOT, "tests", "helper_gjs.js")], env=env, stderr=subprocess.PIPE, text=True)
 try:
     for _ in range(50):
@@ -72,6 +78,18 @@ try:
     out = subprocess.run(["busctl", "--user", "call", MOCK_NAME, "/org/local/WinHelper", "org.local.WinHelper", "Switch", "i", "99"],
                          capture_output=True, text=True).stdout.strip()
     check("拡張の Switch(99)（範囲外）は false", out, "b false")
+    # Flash（枠を光らせる）。描画そのものは Shell でしか確かめられないので、模擬の St/Main に渡した値を見る
+    def flash(*args):
+        return subprocess.run(["busctl", "--user", "call", MOCK_NAME, "/org/local/WinHelper", "org.local.WinHelper", "Flash", "sii", *args],
+                              capture_output=True, text=True).stdout.strip()
+    check("Flash（前面の窓がある）は true", flash("#62a0ea", "4", "450"), "b true")
+    time.sleep(0.3)
+    log = open(flash_log, encoding="utf-8").read().split("\n") if os.path.exists(flash_log) else []
+    check("枠の縁取りが、前面の窓の枠・指定の色と太さで作られる", log[:1], ["widget x=100 y=200 w=800 h=600 style=border: 4px solid #62a0ea; border-radius: 12px;"])
+    check("透明にして消す（長さ 450）", log[1:2], ["ease opacity=0 duration=450"])
+    win.flash_focus({"flash": {"enabled": False, "color": "#fff", "width": 1, "duration": 1}})
+    time.sleep(0.2)
+    check("enabled = false のときは呼ばない", len(open(flash_log, encoding="utf-8").read().split("\n")), len(log))
     # コマンド（win desktop）の経路
     def cli(*args):
         r = subprocess.run([sys.executable, os.path.join(ROOT, "bin", "win"), "desktop", *args], capture_output=True, text=True)

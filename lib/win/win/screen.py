@@ -113,13 +113,15 @@ def monitor_rect():
 
 
 def load_config():
-    cfg = {"layouts": dict(BUILTIN_LAYOUTS), "insets": dict(DEFAULT_INSETS), "gap": 0}
+    cfg = {"layouts": dict(BUILTIN_LAYOUTS), "insets": dict(DEFAULT_INSETS), "gap": 0,
+           "flash": {"enabled": True, "color": "#62a0ea", "width": 2, "duration": 450}}
     if os.path.exists(CONFIG):
         with open(CONFIG, "rb") as f:
             user = tomllib.load(f)
         cfg["layouts"].update(user.get("layouts", {}))
         cfg["insets"].update(user.get("workarea", {}))
         cfg["gap"] = user.get("gap", 0)
+        cfg["flash"].update(user.get("flash", {}))
     return cfg
 
 

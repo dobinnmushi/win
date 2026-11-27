@@ -1,4 +1,8 @@
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 // win（~/projects/win）が使う D-Bus。名前 org.local.WinHelper、パス /org/local/WinHelper。
@@ -17,6 +21,12 @@ const IFACE = `<node>
       <arg type="i" direction="in" name="delta"/>
       <arg type="b" direction="out"/>
     </method>
+    <method name="Flash">
+      <arg type="s" direction="in" name="color"/>
+      <arg type="i" direction="in" name="width"/>
+      <arg type="i" direction="in" name="duration"/>
+      <arg type="b" direction="out"/>
+    </method>
   </interface>
 </node>`;
 
@@ -30,6 +40,12 @@ export default class WinHelper extends Extension {
     }
 
     disable() {
+        if (this._flashTimer) {
+            GLib.source_remove(this._flashTimer);
+            this._flashTimer = 0;
+        }
+        this._flashActor?.destroy();
+        this._flashActor = null;
         if (this._nameId) {
             Gio.bus_unown_name(this._nameId);
             this._nameId = 0;
@@ -56,5 +72,43 @@ export default class WinHelper extends Extension {
     // いまのデスクトップから delta 個ずれたデスクトップへ切り替える（端で一巡はしない）。なければ false。
     SwitchRelative(delta) {
         return this.Switch(global.workspace_manager.get_active_workspace_index() + delta);
+    }
+
+    // いま前面の窓の枠を、color（CSS の色）・width（px）の縁取りで一瞬光らせ、duration（ミリ秒）かけて消す。
+    // Activate の直後に呼ばれるので、フォーカスが移るのを少し待ってから前面の窓を読む。光らせる窓がなければ false。
+    Flash(color, width, duration) {
+        if (this._flashTimer)
+            GLib.source_remove(this._flashTimer);
+        this._flashTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => {
+            this._flashTimer = 0;
+            this._flash(color, width, duration);
+            return GLib.SOURCE_REMOVE;
+        });
+        return global.display.focus_window !== null;
+    }
+
+    _flash(color, width, duration) {
+        const win = global.display.focus_window;
+        if (!win)
+            return;
+        this._flashActor?.destroy();
+        const r = win.get_frame_rect();
+        const full = win.maximized_horizontally && win.maximized_vertically;
+        const actor = new St.Widget({
+            style: `border: ${width}px solid ${color}; border-radius: ${full ? 0 : 12}px;`,
+            x: r.x, y: r.y, width: r.width, height: r.height,
+            reactive: false, opacity: 255,
+        });
+        Main.uiGroup.add_child(actor);
+        this._flashActor = actor;
+        actor.ease({
+            opacity: 0, duration, delay: 80,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                actor.destroy();
+                if (this._flashActor === actor)
+                    this._flashActor = null;
+            },
+        });
     }
 }

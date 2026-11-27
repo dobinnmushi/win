@@ -48,3 +48,14 @@ def switch_relative(delta):
     if not 1 <= cur + delta <= count:
         raise WinError(tr("デスクトップ {0} がありません（1〜{1}）").format((cur + delta), count))
     helper_call("SwitchRelative", "i", delta)
+
+
+def flash_focus(cfg):
+    """いま前面の窓の枠を一瞬光らせる（フォーカスを移すコマンドの終わりに呼ぶ）。設定 [flash] で止められる。拡張が古い・ないときは何もしない。"""
+    f = cfg["flash"]
+    if not f.get("enabled", True):
+        return
+    try:
+        helper_call("Flash", "sii", str(f["color"]), int(f["width"]), int(f["duration"]))
+    except WinError:
+        pass
