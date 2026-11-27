@@ -128,7 +128,7 @@ extension/              GNOME Shell 拡張 win-helper@local（デスクトップ
 利用者の指示で前面の窓が 1 枚に決まったとき、その窓の枠を一瞬光らせ、どの窓に移ったかを分かりやすくする。
 - **対象**: `nav`・`focus`・`pick`（`--id` なし）・`stack`・`group next/prev/show/select`。窓を何枚も動かす `layout`・`set`・`place` は光らせない。名前で指定した `focus` も光らせる（別のデスクトップや後ろから前へ出てくる窓も、見失わないため）。判定は `cli.moves_focus`、呼び出しは命令の終わりに 1 か所だけ（個々の `Activate` には足さない）。
 - **仕組み**: 拡張 win-helper@local の D-Bus `Flash(色, 太さ, 長さ)` が、そのときの前面の窓（Activate の直後でフォーカスの移りを待つため 40 ms 遅らせて読む）の枠に、縁取りだけの `St.Widget` を重ね、透明にして消す。窓には触れない。拡張が古い・ない場合は、光らせずに従来どおり動く。
-- **設定**: `layouts.toml` の `[flash]`（`enabled = true`・`color = "#62a0ea"`・`width = 2`・`duration = 450`）。`enabled = false` で止める。
+- **設定**: `layouts.toml` の `[flash]`（`enabled = true`・`color = "#62a0ea"`・`width = 1`・`duration = 450`）。`enabled = false` で止める。
 - **確認の範囲**: D-Bus と値の受け渡しは `tests/helper_test.py`（模擬の St）で確認。実際の描画は、拡張の読み込み（再ログイン）後でないと確かめられない。
 
 ## 4.4 アプリごとの設定
